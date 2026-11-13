@@ -4,6 +4,11 @@ A hands-on Retrieval-Augmented Generation (RAG) project built from scratch with 
 
 The project uses a custom Azure and AWS cloud knowledge base and demonstrates the complete RAG learning path from raw text to a grounded answer.
 
+## Architecture
+
+![End-to-End RAG Architecture](docs/rag-architecture.png)
+
+
 ## What I Built
 
 This project implements the full RAG workflow step by step:
