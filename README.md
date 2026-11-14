@@ -8,6 +8,10 @@ The project uses a custom Azure and AWS cloud knowledge base and demonstrates th
 
 ![End-to-End RAG Architecture](docs/rag-architecture.svg)
 
+## Validation Proof
+
+The observed working result for this version is saved in [`docs/results/original-rag-validation.md`](docs/results/original-rag-validation.md).
+
 
 ## What I Built
 
