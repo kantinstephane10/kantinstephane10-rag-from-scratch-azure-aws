@@ -1,17 +1,17 @@
 [project]
 name = "rag-from-scratch-azure-aws"
-version = "0.1.0"
-description = "End-to-end RAG learning project using Azure/AWS content, Hugging Face embeddings, ChromaDB, and a local Hugging Face LLM."
+version = "0.2.0"
+description = "End-to-end local RAG with PDF ingestion, recursive chunking, Hugging Face embeddings, ChromaDB, reranking, and Ollama generation."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "chromadb",
     "langchain-community",
     "langchain-text-splitters",
+    "langchain-ollama",
     "sentence-transformers",
-    "transformers",
+    "pymupdf",
     "torch",
-    "accelerate",
 ]
 
 [tool.uv]
