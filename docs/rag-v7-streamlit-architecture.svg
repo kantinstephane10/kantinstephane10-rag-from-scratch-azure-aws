@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="2050" viewBox="0 0 1400 2050">
+  <defs>
+    <style>
+      .title { font: 700 42px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 21px Arial, sans-serif; fill: #475569; }
+      .section { font: 700 24px Arial, sans-serif; fill: #1e293b; }
+      .boxTitle { font: 700 22px Arial, sans-serif; fill: #0f172a; }
+      .boxText { font: 400 18px Arial, sans-serif; fill: #334155; }
+      .small { font: 400 16px Arial, sans-serif; fill: #475569; }
+      .arrow { stroke: #475569; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="2050" fill="#f8fafc"/>
+
+  <text x="700" y="70" text-anchor="middle" class="title">RAG V7 — Streamlit Interface</text>
+  <text x="700" y="108" text-anchor="middle" class="subtitle">UI layer built on the validated V5.2/V6 local RAG backend</text>
+
+  <text x="700" y="165" text-anchor="middle" class="section">User Interface</text>
+
+  <rect x="220" y="205" width="960" height="110" rx="20" fill="#e0e7ff" stroke="#4f46e5" stroke-width="3"/>
+  <text x="700" y="248" text-anchor="middle" class="boxTitle">Streamlit Browser UI</text>
+  <text x="700" y="280" text-anchor="middle" class="boxText">Chat input • example questions • chat history • clear-chat control</text>
+
+  <line x1="700" y1="315" x2="700" y2="350" class="arrow"/>
+
+  <rect x="220" y="350" width="960" height="115" rx="20" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <text x="700" y="392" text-anchor="middle" class="boxTitle">st.cache_resource — Initialize Once</text>
+  <text x="700" y="424" text-anchor="middle" class="boxText">Load MiniLM • CrossEncoder • Ollama • PDF chunks • ChromaDB</text>
+  <text x="700" y="451" text-anchor="middle" class="small">Prevents expensive rebuilds on normal Streamlit reruns</text>
+
+  <text x="700" y="545" text-anchor="middle" class="section">Validated RAG Backend</text>
+
+  <rect x="250" y="580" width="900" height="90" rx="18" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <text x="700" y="618" text-anchor="middle" class="boxTitle">Private Local MBA PDF</text>
+  <text x="700" y="647" text-anchor="middle" class="boxText">Never uploaded to GitHub</text>
+
+  <line x1="700" y1="670" x2="700" y2="705" class="arrow"/>
+
+  <rect x="250" y="705" width="900" height="100" rx="18" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+  <text x="700" y="745" text-anchor="middle" class="boxTitle">Load → Clean → Metadata → Recursive Chunking</text>
+  <text x="700" y="775" text-anchor="middle" class="boxText">800 characters • 120 overlap • 351 indexed chunks</text>
+
+  <line x1="700" y1="805" x2="700" y2="840" class="arrow"/>
+
+  <rect x="250" y="840" width="900" height="100" rx="18" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+  <text x="700" y="880" text-anchor="middle" class="boxTitle">MiniLM Embeddings → ChromaDB</text>
+  <text x="700" y="910" text-anchor="middle" class="boxText">all-MiniLM-L6-v2 • 384 dimensions</text>
+
+  <line x1="700" y1="940" x2="700" y2="975" class="arrow"/>
+
+  <rect x="250" y="975" width="900" height="95" rx="18" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="700" y="1013" text-anchor="middle" class="boxTitle">Top-8 Semantic Retrieval</text>
+  <text x="700" y="1043" text-anchor="middle" class="boxText">Question embedding searches local ChromaDB</text>
+
+  <line x1="700" y1="1070" x2="700" y2="1105" class="arrow"/>
+
+  <rect x="250" y="1105" width="900" height="100" rx="18" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <text x="700" y="1145" text-anchor="middle" class="boxTitle">Neighbor Expansion ±1</text>
+  <text x="700" y="1175" text-anchor="middle" class="boxText">Add adjacent same-course chunks</text>
+
+  <line x1="700" y1="1205" x2="700" y2="1240" class="arrow"/>
+
+  <rect x="250" y="1240" width="900" height="100" rx="18" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+  <text x="700" y="1280" text-anchor="middle" class="boxTitle">CrossEncoder Reranking → Best 3</text>
+  <text x="700" y="1310" text-anchor="middle" class="boxText">ms-marco-MiniLM-L6-v2</text>
+
+  <line x1="700" y1="1340" x2="700" y2="1375" class="arrow"/>
+
+  <rect x="250" y="1375" width="900" height="100" rx="18" fill="#fae8ff" stroke="#a21caf" stroke-width="2"/>
+  <text x="700" y="1415" text-anchor="middle" class="boxTitle">Ollama qwen3:4b-instruct</text>
+  <text x="700" y="1445" text-anchor="middle" class="boxText">Generate grounded answer from retrieved context only</text>
+
+  <line x1="700" y1="1475" x2="700" y2="1510" class="arrow"/>
+
+  <text x="700" y="1575" text-anchor="middle" class="section">Explainable UI Output</text>
+
+  <rect x="180" y="1610" width="1040" height="130" rx="20" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+  <text x="700" y="1650" text-anchor="middle" class="boxTitle">Answer in Chat</text>
+  <text x="700" y="1682" text-anchor="middle" class="boxText">Course + PDF page citation</text>
+  <text x="700" y="1712" text-anchor="middle" class="small">Conversation stored in Streamlit session state</text>
+
+  <line x1="700" y1="1740" x2="700" y2="1775" class="arrow"/>
+
+  <rect x="180" y="1775" width="1040" height="155" rx="20" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
+  <text x="700" y="1817" text-anchor="middle" class="boxTitle">Expandable Retrieved Sources</text>
+  <text x="700" y="1849" text-anchor="middle" class="boxText">Course • chapter • PDF page • semantic/neighbor source • reranker score</text>
+  <text x="700" y="1880" text-anchor="middle" class="small">Keeps the interface simple while preserving evidence and explainability</text>
+
+  <text x="700" y="2000" text-anchor="middle" class="small">Backend validation inherited from V6: 9/9 end-to-end tests passed.</text>
+</svg>
