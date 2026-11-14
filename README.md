@@ -37,6 +37,8 @@ Question Embedding
        ↓
 Top-8 Semantic Retrieval
        ↓
+Neighbor Expansion (±1 chunk)
+       ↓
 CrossEncoder Reranking
 ms-marco-MiniLM-L6-v2
        ↓
@@ -176,11 +178,28 @@ Context, and Deliberative. [C200, PDF page 10]
 - local Hugging Face embeddings
 - persistent ChromaDB vector storage
 - semantic Top-K retrieval
+- neighboring-chunk expansion
 - CrossEncoder reranking
 - local Ollama generation
 - grounded prompting
 - course and PDF-page citations
 
+## Retrieval Evaluation
+
+The V5.2 retriever was evaluated with 12 questions spanning all six MBA courses.
+
+Results:
+
+```text
+Hit@1:  9/12  (75.0%)
+Hit@3: 12/12 (100.0%)
+Hit@5: 12/12 (100.0%)
+Hit@8: 12/12 (100.0%)
+MRR:   0.875
+```
+
+A retrieval failure involving the Agentic RAG architecture was diagnosed and fixed with neighboring-chunk expansion. The semantic search found an adjacent introductory chunk, and the answer-bearing next chunk was added before reranking.
+
 ## Next Step
 
-The next milestone is **RAG evaluation** across all six MBA courses before adding a Streamlit interface or agent capabilities.
+The next milestone is **end-to-end answer evaluation with Ollama**: verify answer correctness, grounding, and source citations across all six MBA courses before adding a Streamlit interface or agent capabilities.
