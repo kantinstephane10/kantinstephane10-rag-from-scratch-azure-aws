@@ -14,6 +14,10 @@ feature/mba-rag-v4-ollama
 
 ![RAG V4 Architecture](docs/rag-v4-architecture.svg)
 
+## Validation Proof
+
+The observed successful V4 run is saved in [`docs/results/v4-validation.md`](docs/results/v4-validation.md). It includes the indexing counts, model configuration, retrieved evidence, Ollama answer, and citation.
+
 ## Current Architecture
 
 ```text
