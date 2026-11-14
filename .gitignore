@@ -10,6 +10,9 @@ __pycache__/
 chroma_db/
 chroma_db_*/
 
-# Private/local source documents
+# PDF files are ignored by default.
 *.pdf
-data/text_files/pdf/
+data/text_files/pdf/*
+
+# V7 explicitly tracks this MBA source PDF.
+!data/text_files/pdf/WGU_MBA_IT_Management_Bound_Edition_Biography_At_Beginning.pdf
