@@ -9,15 +9,16 @@ from langchain_ollama import ChatOllama
 
 
 # ============================================================
-# RAG V4 - MBA PDF + OLLAMA
+# RAG V5.2 - MBA PDF + NEIGHBOR EXPANSION + OLLAMA
 #
 # PDF
 #   -> Clean
+#   -> Metadata
 #   -> Recursive Chunking
 #   -> Noise Filtering
 #   -> MiniLM Embeddings
-#   -> ChromaDB
-#   -> Top-8 Retrieval
+#   -> ChromaDB Top-8
+#   -> Neighbor Expansion
 #   -> CrossEncoder Reranking
 #   -> Best 3
 #   -> Ollama Qwen3
@@ -30,8 +31,8 @@ PDF_FILE = Path(
     "WGU_MBA_IT_Management_Bound_Edition_Biography_At_Beginning.pdf"
 )
 
-CHROMA_PATH = "./chroma_db_mba_v4_ollama"
-COLLECTION_NAME = "wgu_mba_rag_v4_ollama"
+CHROMA_PATH = "./chroma_db_mba_v5_2"
+COLLECTION_NAME = "wgu_mba_rag_v5_2"
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
@@ -41,6 +42,7 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 120
 RETRIEVE_K = 8
 FINAL_K = 3
+NEIGHBOR_RANGE = 1
 
 
 def clean_text(text):
@@ -171,8 +173,6 @@ def load_and_chunk_pdf():
         document.metadata["chapter"] = chapter
         document.metadata["source"] = PDF_FILE.name
 
-    print("Text cleaned and metadata added")
-
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
@@ -290,18 +290,17 @@ def build_vector_database(rag_chunks, embedding_model):
     return collection
 
 
-def retrieve_and_rerank(
+def retrieve_candidates(
     question,
     collection,
     embedding_model,
-    reranker,
 ):
     question_embedding = embedding_model.encode(
         [question],
         normalize_embeddings=True,
     )
 
-    results = collection.query(
+    return collection.query(
         query_embeddings=question_embedding.tolist(),
         n_results=RETRIEVE_K,
         include=[
@@ -311,41 +310,128 @@ def retrieve_and_rerank(
         ],
     )
 
-    documents = results["documents"][0]
-    metadatas = results["metadatas"][0]
-    distances = results["distances"][0]
+
+def expand_with_neighbors(
+    results,
+    rag_chunk_lookup,
+):
+    documents_found = results["documents"][0]
+    metadata_found = results["metadatas"][0]
+    distances_found = results["distances"][0]
+
+    expanded = {}
+
+    for i in range(len(documents_found)):
+        metadata = metadata_found[i]
+        rag_chunk_number = metadata["rag_chunk_number"]
+
+        for offset in range(
+            -NEIGHBOR_RANGE,
+            NEIGHBOR_RANGE + 1,
+        ):
+            neighbor_number = (
+                rag_chunk_number + offset
+            )
+
+            if neighbor_number not in rag_chunk_lookup:
+                continue
+
+            neighbor_chunk = rag_chunk_lookup[
+                neighbor_number
+            ]
+
+            if (
+                neighbor_chunk.metadata["course"]
+                != metadata["course"]
+            ):
+                continue
+
+            if offset == 0:
+                vector_distance = float(
+                    distances_found[i]
+                )
+                retrieval_source = "semantic"
+            else:
+                vector_distance = None
+                retrieval_source = "neighbor"
+
+            if neighbor_number not in expanded:
+                expanded[neighbor_number] = {
+                    "document": neighbor_chunk.page_content,
+                    "metadata": {
+                        "source": neighbor_chunk.metadata[
+                            "source"
+                        ],
+                        "pdf_page": neighbor_chunk.metadata[
+                            "pdf_page"
+                        ],
+                        "course": neighbor_chunk.metadata[
+                            "course"
+                        ],
+                        "chapter": neighbor_chunk.metadata[
+                            "chapter"
+                        ],
+                        "rag_chunk_number": neighbor_chunk.metadata[
+                            "rag_chunk_number"
+                        ],
+                    },
+                    "vector_distance": vector_distance,
+                    "retrieval_source": retrieval_source,
+                }
+
+            elif offset == 0:
+                expanded[neighbor_number][
+                    "vector_distance"
+                ] = float(distances_found[i])
+
+                expanded[neighbor_number][
+                    "retrieval_source"
+                ] = "semantic"
+
+    return list(expanded.values())
+
+
+def retrieve_expand_and_rerank(
+    question,
+    collection,
+    embedding_model,
+    reranker,
+    rag_chunk_lookup,
+):
+    results = retrieve_candidates(
+        question,
+        collection,
+        embedding_model,
+    )
+
+    candidates = expand_with_neighbors(
+        results,
+        rag_chunk_lookup,
+    )
 
     pairs = [
-        (question, document)
-        for document in documents
+        (
+            question,
+            candidate["document"],
+        )
+        for candidate in candidates
     ]
 
     reranker_scores = reranker.predict(
         pairs
     )
 
-    ranked_results = []
-
-    for i in range(len(documents)):
-        ranked_results.append(
-            {
-                "document": documents[i],
-                "metadata": metadatas[i],
-                "vector_distance": float(
-                    distances[i]
-                ),
-                "reranker_score": float(
-                    reranker_scores[i]
-                ),
-            }
+    for i in range(len(candidates)):
+        candidates[i]["reranker_score"] = float(
+            reranker_scores[i]
         )
 
-    ranked_results.sort(
+    candidates.sort(
         key=lambda item: item["reranker_score"],
         reverse=True,
     )
 
-    return ranked_results[:FINAL_K]
+    return candidates[:FINAL_K]
 
 
 def build_context(retrieved_results):
@@ -420,13 +506,15 @@ def ask_rag(
     collection,
     embedding_model,
     reranker,
+    rag_chunk_lookup,
     llm,
 ):
-    sources = retrieve_and_rerank(
+    sources = retrieve_expand_and_rerank(
         question,
         collection,
         embedding_model,
         reranker,
+        rag_chunk_lookup,
     )
 
     answer = generate_answer(
@@ -467,6 +555,11 @@ def main():
 
     rag_chunks = load_and_chunk_pdf()
 
+    rag_chunk_lookup = {
+        chunk.metadata["rag_chunk_number"]: chunk
+        for chunk in rag_chunks
+    }
+
     collection = build_vector_database(
         rag_chunks,
         embedding_model,
@@ -480,7 +573,8 @@ def main():
 
     if not question:
         question = (
-            "What are my five CliftonStrengths?"
+            "What technologies were proposed "
+            "for the Agentic RAG architecture?"
         )
 
     answer, sources = ask_rag(
@@ -488,6 +582,7 @@ def main():
         collection,
         embedding_model,
         reranker,
+        rag_chunk_lookup,
         llm,
     )
 
@@ -510,6 +605,7 @@ def main():
             f"\nSource {i}: "
             f'{metadata["course"]} | '
             f'PDF page {metadata["pdf_page"]} | '
+            f'{result["retrieval_source"]} | '
             f'reranker score '
             f'{result["reranker_score"]:.4f}'
         )
