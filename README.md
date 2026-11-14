@@ -229,3 +229,5 @@ The MBA portfolio PDF is expected at:
 ```text
 data/text_files/pdf/WGU_MBA_IT_Management_Bound_Edition_Biography_At_Beginning.pdf
 ```
+
+The source PDF is private, kept local, and intentionally excluded from GitHub by `.gitignore`.
