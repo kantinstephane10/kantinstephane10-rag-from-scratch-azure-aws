@@ -13,6 +13,48 @@ The project uses a custom Azure and AWS cloud knowledge base and demonstrates th
 The observed working result for this version is saved in [`docs/results/original-rag-validation.md`](docs/results/original-rag-validation.md).
 
 
+## Engineering Challenges, Decisions, and Why This Diagram
+
+### Challenge 1 — Learn RAG from first principles without hiding the workflow
+
+The first goal was not to use a large prebuilt chain. The goal was to understand each RAG stage separately: loading, cleaning, chunking, embedding, vector search, context construction, and generation.
+
+**Decision:** keep the first implementation intentionally simple and local. Each stage is visible in the code and can be tested independently.
+
+**Why:** this makes failures easier to understand. If the final answer is wrong, we can inspect whether the problem came from chunking, retrieval, context, or generation instead of treating RAG as one black box.
+
+### Challenge 2 — Run locally without depending on a paid API
+
+The project needed a free/local stack that could run on a Windows development machine.
+
+**Decision:** use:
+
+- `all-MiniLM-L6-v2` for lightweight 384-dimensional embeddings;
+- ChromaDB for a simple persistent local vector database;
+- a small Qwen instruction model for local generation.
+
+**Why:** these choices kept the system accessible while still demonstrating a complete RAG workflow.
+
+### Challenge 3 — Separate indexing from question answering
+
+A common beginner mistake is to think the whole document is sent to the LLM for every question.
+
+**Decision:** separate the architecture into two logical flows:
+
+1. **Knowledge preparation:** document → chunks → embeddings → ChromaDB.
+2. **Question answering:** question → embedding → semantic search → relevant chunks → LLM.
+
+### Why the diagram is designed this way
+
+The diagram uses two visual lanes because RAG has two different jobs:
+
+- the **left side** creates the searchable knowledge base;
+- the **right side** handles a user question;
+- the connection between ChromaDB and semantic search shows that only relevant vectors/chunks are retrieved;
+- the LLM appears last because generation is the final stage, not the retrieval mechanism.
+
+This original diagram is the baseline architecture. Later branches extend it only when testing shows that an additional component is necessary.
+
 ## What I Built
 
 This project implements the full RAG workflow step by step:
