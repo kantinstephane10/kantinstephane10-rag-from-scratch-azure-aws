@@ -9,38 +9,29 @@ from langchain_ollama import ChatOllama
 
 
 # ============================================================
-# RAG V8 - QUERY-AWARE RETRIEVAL + DETERMINISTIC CITATIONS
+# RAG V9 - CONVERSATIONAL MEMORY + QUERY-AWARE RETRIEVAL
 #
-# FOCUSED QUESTION
-#   -> ChromaDB Top 8
-#   -> Neighbor Expansion
-#   -> CrossEncoder
-#   -> Best 3
+# V8:
+#   - focused vs broad query routing
+#   - same-course neighbor expansion
+#   - CrossEncoder reranking
+#   - deterministic citations
 #
-# BROAD / PORTFOLIO QUESTION
-#   -> Search every course separately
-#   -> Neighbor Expansion inside each course
-#   -> CrossEncoder inside each course
-#   -> Best evidence from every course
-#
-# BOTH PATHS
-#   -> Ollama writes answer + [SOURCE N] markers
-#   -> Python replaces source markers with real metadata
-#   -> Final grounded answer
+# V9:
+#   - short-term conversation memory
+#   - follow-up question rewriting
+#   - broad-query course relevance gate
+#   - conflicting refusal cleanup
 # ============================================================
 
-
-# ============================================================
-# 1. FILE + MODEL SETTINGS
-# ============================================================
 
 PDF_FILE = Path(
     "data/text_files/pdf/"
     "WGU_MBA_IT_Management_Bound_Edition_Biography_At_Beginning.pdf"
 )
 
-CHROMA_PATH = "./chroma_db_mba_v8"
-COLLECTION_NAME = "wgu_mba_rag_v8"
+CHROMA_PATH = "./chroma_db_mba_v9"
+COLLECTION_NAME = "wgu_mba_rag_v9"
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
@@ -49,14 +40,19 @@ OLLAMA_MODEL = "qwen3:4b-instruct"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 120
 
-# Focused question settings
 RETRIEVE_K = 8
 FINAL_K = 3
 NEIGHBOR_RANGE = 1
 
-# Broad question settings
 BROAD_PER_COURSE_K = 4
 BROAD_FINAL_PER_COURSE = 2
+
+MEMORY_MAX_MESSAGES = 12
+
+REFUSAL_MESSAGE = (
+    "I don't have enough information "
+    "in the provided document to answer that."
+)
 
 COURSE_CODES = [
     "C200",
@@ -69,11 +65,10 @@ COURSE_CODES = [
 
 
 # ============================================================
-# 2. CLEAN TEXT
+# TEXT + METADATA
 # ============================================================
 
 def clean_text(text):
-
     text = re.sub(
         r"WGU\s*[|•]\s*MBA IN INFORMATION TECHNOLOGY MANAGEMENT",
         "",
@@ -90,7 +85,8 @@ def clean_text(text):
     )
 
     text = re.sub(
-        r"MBA IN INFORMATION TECHNOLOGY MANAGEMENT\s*[|•]\s*KANTIN TONGUE",
+        r"MBA IN INFORMATION TECHNOLOGY MANAGEMENT\s*"
+        r"[|•]\s*KANTIN TONGUE",
         "",
         text,
         flags=re.IGNORECASE,
@@ -104,12 +100,7 @@ def clean_text(text):
     return text.strip()
 
 
-# ============================================================
-# 3. COURSE METADATA
-# ============================================================
-
 def get_course_info(pdf_page):
-
     if 1 <= pdf_page <= 6:
         return (
             "Front Matter",
@@ -152,18 +143,10 @@ def get_course_info(pdf_page):
             "Data-Driven Decision Making",
         )
 
-    return (
-        "Unknown",
-        "Unknown",
-    )
+    return ("Unknown", "Unknown")
 
-
-# ============================================================
-# 4. LOW-VALUE CHUNK FILTER
-# ============================================================
 
 def is_low_value_chunk(text):
-
     text_lower = text.lower()
 
     cover_phrases = [
@@ -194,16 +177,15 @@ def is_low_value_chunk(text):
 
     return (
         cover_score >= 2
-        or
-        legal_score >= 3
+        or legal_score >= 3
     )
 
 
-# ============================================================
-# 5. LOAD + CHUNK PDF
-# ============================================================
-
 def load_and_chunk_pdf():
+    if not PDF_FILE.exists():
+        raise FileNotFoundError(
+            f"PDF not found: {PDF_FILE}"
+        )
 
     loader = PyMuPDFLoader(
         str(PDF_FILE)
@@ -211,13 +193,9 @@ def load_and_chunk_pdf():
 
     documents = loader.load()
 
-    print(
-        "Pages loaded:",
-        len(documents),
-    )
+    print("Pages loaded:", len(documents))
 
     for document in documents:
-
         document.page_content = clean_text(
             document.page_content
         )
@@ -231,29 +209,13 @@ def load_and_chunk_pdf():
             pdf_page
         )
 
-        document.metadata[
-            "pdf_page"
-        ] = pdf_page
+        document.metadata["pdf_page"] = pdf_page
+        document.metadata["course"] = course
+        document.metadata["chapter"] = chapter
+        document.metadata["source"] = PDF_FILE.name
 
-        document.metadata[
-            "course"
-        ] = course
-
-        document.metadata[
-            "chapter"
-        ] = chapter
-
-        document.metadata[
-            "source"
-        ] = PDF_FILE.name
-
-    print(
-        "Text cleaned"
-    )
-
-    print(
-        "Metadata added"
-    )
+    print("Text cleaned")
+    print("Metadata added")
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
@@ -271,27 +233,21 @@ def load_and_chunk_pdf():
         documents
     )
 
-    for i, chunk in enumerate(
-        chunks
-    ):
+    print("All chunks:", len(chunks))
 
-        chunk.metadata[
-            "chunk_number"
-        ] = i
-
-        chunk.metadata[
-            "chunk_characters"
-        ] = len(
+    for i, chunk in enumerate(chunks):
+        chunk.metadata["chunk_number"] = i
+        chunk.metadata["chunk_characters"] = len(
             chunk.page_content
         )
 
     course_chunks = [
         chunk
         for chunk in chunks
-        if chunk.metadata[
-            "course"
-        ] != "Front Matter"
+        if chunk.metadata["course"] != "Front Matter"
     ]
+
+    print("Course chunks:", len(course_chunks))
 
     rag_chunks = [
         chunk
@@ -301,49 +257,28 @@ def load_and_chunk_pdf():
         )
     ]
 
-    for i, chunk in enumerate(
-        rag_chunks
-    ):
+    print("Final indexed chunks:", len(rag_chunks))
 
-        chunk.metadata[
-            "rag_chunk_number"
-        ] = i
-
-    print(
-        "All chunks:",
-        len(chunks),
-    )
-
-    print(
-        "Course chunks:",
-        len(course_chunks),
-    )
-
-    print(
-        "Indexed RAG chunks:",
-        len(rag_chunks),
-    )
+    for i, chunk in enumerate(rag_chunks):
+        chunk.metadata["rag_chunk_number"] = i
 
     return rag_chunks
 
 
 # ============================================================
-# 6. BUILD CHROMADB
+# VECTOR DATABASE
 # ============================================================
 
 def build_vector_database(
     rag_chunks,
     embedding_model,
 ):
-
     chunk_texts = [
         chunk.page_content
         for chunk in rag_chunks
     ]
 
-    print(
-        "Creating embeddings..."
-    )
+    print("\nCreating embeddings...")
 
     embeddings = embedding_model.encode(
         chunk_texts,
@@ -361,70 +296,36 @@ def build_vector_database(
     )
 
     try:
-
         client.delete_collection(
             COLLECTION_NAME
         )
-
     except Exception:
-
         pass
 
     collection = client.create_collection(
         name=COLLECTION_NAME,
         metadata={
-            "hnsw:space":
-                "cosine",
+            "hnsw:space": "cosine",
         },
     )
 
     ids = [
         f"mba_chunk_{i:04d}"
-        for i in range(
-            len(rag_chunks)
-        )
+        for i in range(len(rag_chunks))
     ]
 
     metadatas = []
 
     for chunk in rag_chunks:
-
         metadatas.append(
             {
-                "source":
-                    chunk.metadata[
-                        "source"
-                    ],
-
-                "pdf_page":
-                    chunk.metadata[
-                        "pdf_page"
-                    ],
-
-                "course":
-                    chunk.metadata[
-                        "course"
-                    ],
-
-                "chapter":
-                    chunk.metadata[
-                        "chapter"
-                    ],
-
-                "original_chunk_number":
-                    chunk.metadata[
-                        "chunk_number"
-                    ],
-
-                "rag_chunk_number":
-                    chunk.metadata[
-                        "rag_chunk_number"
-                    ],
-
-                "chunk_characters":
-                    chunk.metadata[
-                        "chunk_characters"
-                    ],
+                "source": chunk.metadata["source"],
+                "pdf_page": chunk.metadata["pdf_page"],
+                "course": chunk.metadata["course"],
+                "chapter": chunk.metadata["chapter"],
+                "rag_chunk_number": chunk.metadata[
+                    "rag_chunk_number"
+                ],
             }
         )
 
@@ -436,7 +337,7 @@ def build_vector_database(
     )
 
     print(
-        "Vectors stored in ChromaDB:",
+        "Vectors stored:",
         collection.count(),
     )
 
@@ -444,13 +345,102 @@ def build_vector_database(
 
 
 # ============================================================
-# 7. QUERY TYPE ROUTER
+# CONVERSATION MEMORY
 # ============================================================
 
-def detect_query_type(
-    question,
+def format_conversation_history(
+    conversation_history,
 ):
+    if not conversation_history:
+        return "No previous conversation."
 
+    recent_messages = conversation_history[
+        -MEMORY_MAX_MESSAGES:
+    ]
+
+    lines = []
+
+    for message in recent_messages:
+        role = message.get("role", "")
+        content = message.get("content", "")
+
+        if role == "user":
+            label = "USER"
+        elif role == "assistant":
+            label = "ASSISTANT"
+        else:
+            continue
+
+        lines.append(
+            f"{label}: {content}"
+        )
+
+    return "\n".join(lines)
+
+
+def contextualize_question(
+    question,
+    conversation_history,
+    llm,
+):
+    if not conversation_history:
+        return question
+
+    history_text = format_conversation_history(
+        conversation_history
+    )
+
+    system_message = """
+You rewrite follow-up questions into standalone search questions.
+
+Use the conversation history only to resolve references such as:
+it, that, they, those, which one, the first one, the second one,
+that course, that project, or that technology.
+
+Rules:
+1. Preserve the user's original meaning.
+2. Do not answer the question.
+3. Do not add facts.
+4. If the question is already standalone, return it unchanged.
+5. Return ONLY the standalone rewritten question.
+"""
+
+    user_message = f"""
+Conversation history:
+
+{history_text}
+
+Current question:
+
+{question}
+
+Standalone search question:
+"""
+
+    response = llm.invoke(
+        [
+            ("system", system_message),
+            ("human", user_message),
+        ]
+    )
+
+    standalone_question = (
+        response.content
+        .strip()
+        .strip('"')
+    )
+
+    if not standalone_question:
+        return question
+
+    return standalone_question
+
+
+# ============================================================
+# QUERY ROUTER
+# ============================================================
+
+def detect_query_type(question):
     question_lower = (
         question.lower().strip()
     )
@@ -469,97 +459,61 @@ def detect_query_type(
     ]
 
     for pattern in broad_patterns:
-
         if re.search(
             pattern,
             question_lower,
         ):
-
             return "broad"
 
     return "focused"
 
 
 # ============================================================
-# 8. EMBED QUESTION
+# RETRIEVAL HELPERS
 # ============================================================
 
 def embed_question(
     question,
     embedding_model,
 ):
-
     return embedding_model.encode(
         [question],
         normalize_embeddings=True,
     )
 
 
-# ============================================================
-# 9. CHROMA RESULT -> CANDIDATES
-# ============================================================
-
-def results_to_candidates(
-    results,
-):
-
-    documents_found = (
-        results["documents"][0]
-    )
-
-    metadata_found = (
-        results["metadatas"][0]
-    )
-
-    distances_found = (
-        results["distances"][0]
-    )
+def results_to_candidates(results):
+    documents_found = results["documents"][0]
+    metadata_found = results["metadatas"][0]
+    distances_found = results["distances"][0]
 
     candidates = []
 
-    for i in range(
-        len(documents_found)
-    ):
-
+    for i in range(len(documents_found)):
         candidates.append(
             {
-                "document":
-                    documents_found[i],
-
-                "metadata":
-                    metadata_found[i],
-
-                "vector_distance":
-                    float(
-                        distances_found[i]
-                    ),
-
-                "retrieval_source":
-                    "semantic",
+                "document": documents_found[i],
+                "metadata": metadata_found[i],
+                "vector_distance": float(
+                    distances_found[i]
+                ),
+                "retrieval_source": "semantic",
             }
         )
 
     return candidates
 
 
-# ============================================================
-# 10. NEIGHBOR EXPANSION
-# ============================================================
-
-def expand_candidates_with_neighbors(
+def add_neighbors(
     candidates,
     rag_chunk_lookup,
 ):
-
     expanded = {}
 
     for candidate in candidates:
+        metadata = candidate["metadata"]
 
-        metadata = candidate[
-            "metadata"
-        ]
-
-        rag_chunk_number = metadata[
+        current_number = metadata[
             "rag_chunk_number"
         ]
 
@@ -567,9 +521,8 @@ def expand_candidates_with_neighbors(
             -NEIGHBOR_RANGE,
             NEIGHBOR_RANGE + 1,
         ):
-
             neighbor_number = (
-                rag_chunk_number
+                current_number
                 + offset
             )
 
@@ -577,7 +530,6 @@ def expand_candidates_with_neighbors(
                 neighbor_number
                 not in rag_chunk_lookup
             ):
-
                 continue
 
             neighbor_chunk = (
@@ -587,145 +539,86 @@ def expand_candidates_with_neighbors(
             )
 
             if (
-                neighbor_chunk.metadata[
-                    "course"
-                ]
-                !=
-                metadata[
-                    "course"
-                ]
+                neighbor_chunk.metadata["course"]
+                != metadata["course"]
             ):
-
                 continue
 
             if offset == 0:
-
-                vector_distance = (
-                    candidate[
-                        "vector_distance"
-                    ]
-                )
-
-                retrieval_source = (
-                    "semantic"
-                )
-
+                retrieval_source = "semantic"
+                vector_distance = candidate[
+                    "vector_distance"
+                ]
             else:
-
+                retrieval_source = "neighbor"
                 vector_distance = None
 
-                retrieval_source = (
-                    "neighbor"
-                )
-
-            if (
-                neighbor_number
-                not in expanded
-            ):
-
-                expanded[
-                    neighbor_number
-                ] = {
+            if neighbor_number not in expanded:
+                expanded[neighbor_number] = {
                     "document":
                         neighbor_chunk.page_content,
-
                     "metadata": {
                         "source":
-                            neighbor_chunk.metadata[
-                                "source"
-                            ],
-
+                            neighbor_chunk.metadata["source"],
                         "pdf_page":
-                            neighbor_chunk.metadata[
-                                "pdf_page"
-                            ],
-
+                            neighbor_chunk.metadata["pdf_page"],
                         "course":
-                            neighbor_chunk.metadata[
-                                "course"
-                            ],
-
+                            neighbor_chunk.metadata["course"],
                         "chapter":
-                            neighbor_chunk.metadata[
-                                "chapter"
-                            ],
-
+                            neighbor_chunk.metadata["chapter"],
                         "rag_chunk_number":
                             neighbor_chunk.metadata[
                                 "rag_chunk_number"
                             ],
                     },
-
                     "vector_distance":
                         vector_distance,
-
                     "retrieval_source":
                         retrieval_source,
                 }
 
             elif offset == 0:
+                expanded[
+                    neighbor_number
+                ]["retrieval_source"] = "semantic"
 
                 expanded[
                     neighbor_number
-                ][
-                    "vector_distance"
-                ] = vector_distance
-
-                expanded[
-                    neighbor_number
-                ][
-                    "retrieval_source"
-                ] = "semantic"
+                ]["vector_distance"] = vector_distance
 
     return list(
         expanded.values()
     )
 
 
-# ============================================================
-# 11. RERANK CANDIDATES
-# ============================================================
-
 def rerank_candidates(
     question,
     candidates,
     reranker,
 ):
-
     if not candidates:
-
         return []
 
     pairs = [
         (
             question,
-            candidate[
-                "document"
-            ],
+            candidate["document"],
         )
-        for candidate
-        in candidates
+        for candidate in candidates
     ]
 
     scores = reranker.predict(
         pairs
     )
 
-    for i in range(
-        len(candidates)
-    ):
-
+    for i in range(len(candidates)):
         candidates[i][
             "reranker_score"
-        ] = float(
-            scores[i]
-        )
+        ] = float(scores[i])
 
     candidates.sort(
         key=lambda item:
-            item[
-                "reranker_score"
-            ],
+            item["reranker_score"],
         reverse=True,
     )
 
@@ -733,7 +626,7 @@ def rerank_candidates(
 
 
 # ============================================================
-# 12. FOCUSED RETRIEVAL
+# FOCUSED RETRIEVAL
 # ============================================================
 
 def retrieve_focused(
@@ -743,7 +636,6 @@ def retrieve_focused(
     reranker,
     rag_chunk_lookup,
 ):
-
     question_embedding = embed_question(
         question,
         embedding_model,
@@ -765,7 +657,7 @@ def retrieve_focused(
         results
     )
 
-    candidates = expand_candidates_with_neighbors(
+    candidates = add_neighbors(
         candidates,
         rag_chunk_lookup,
     )
@@ -781,16 +673,13 @@ def retrieve_focused(
     ]
 
     for result in final_results:
-
-        result[
-            "query_type"
-        ] = "focused"
+        result["query_type"] = "focused"
 
     return final_results
 
 
 # ============================================================
-# 13. BROAD / COURSE-AWARE RETRIEVAL
+# BROAD RETRIEVAL
 # ============================================================
 
 def retrieve_broad(
@@ -800,7 +689,6 @@ def retrieve_broad(
     reranker,
     rag_chunk_lookup,
 ):
-
     question_embedding = embed_question(
         question,
         embedding_model,
@@ -809,15 +697,13 @@ def retrieve_broad(
     final_results = []
 
     for course in COURSE_CODES:
-
         results = collection.query(
             query_embeddings=(
                 question_embedding.tolist()
             ),
             n_results=BROAD_PER_COURSE_K,
             where={
-                "course":
-                    course
+                "course": course,
             },
             include=[
                 "documents",
@@ -826,40 +712,27 @@ def retrieve_broad(
             ],
         )
 
-        course_candidates = (
-            results_to_candidates(
-                results
-            )
+        candidates = results_to_candidates(
+            results
         )
 
-        course_candidates = (
-            expand_candidates_with_neighbors(
-                course_candidates,
-                rag_chunk_lookup,
-            )
+        candidates = add_neighbors(
+            candidates,
+            rag_chunk_lookup,
         )
 
-        course_candidates = (
-            rerank_candidates(
-                question,
-                course_candidates,
-                reranker,
-            )
+        candidates = rerank_candidates(
+            question,
+            candidates,
+            reranker,
         )
 
-        selected = course_candidates[
+        selected = candidates[
             :BROAD_FINAL_PER_COURSE
         ]
 
         for result in selected:
-
-            result[
-                "query_type"
-            ] = "broad"
-
-            result[
-                "course_search"
-            ] = course
+            result["query_type"] = "broad"
 
         final_results.extend(
             selected
@@ -868,75 +741,226 @@ def retrieve_broad(
     return final_results
 
 
-# ============================================================
-# 14. QUERY-AWARE RETRIEVAL
-# ============================================================
+def group_sources_by_course(sources):
+    grouped = {}
+
+    for source in sources:
+        course = source[
+            "metadata"
+        ]["course"]
+
+        if course not in grouped:
+            grouped[course] = []
+
+        grouped[course].append(
+            source
+        )
+
+    return grouped
+
+
+def filter_broad_sources_by_relevance(
+    question,
+    sources,
+    llm,
+):
+    if not sources:
+        return []
+
+    grouped = group_sources_by_course(
+        sources
+    )
+
+    evidence_parts = []
+
+    for course in COURSE_CODES:
+        course_sources = grouped.get(
+            course,
+            [],
+        )
+
+        if not course_sources:
+            continue
+
+        chapter = course_sources[
+            0
+        ]["metadata"]["chapter"]
+
+        evidence_parts.append(
+            f"""
+COURSE CODE: {course}
+COURSE TITLE: {chapter}
+""".strip()
+        )
+
+        for i, source in enumerate(
+            course_sources,
+            start=1,
+        ):
+            evidence_parts.append(
+                f"""
+Evidence {i}
+PDF Page: {source["metadata"]["pdf_page"]}
+
+{source["document"]}
+""".strip()
+            )
+
+    course_evidence = "\n\n".join(
+        evidence_parts
+    )
+
+    allowed_codes = ", ".join(
+        COURSE_CODES
+    )
+
+    system_message = f"""
+You are a strict evidence relevance classifier.
+
+The user asked a broad question across an MBA portfolio.
+
+Decide which courses SUBSTANTIVELY discuss the topic.
+
+Allowed course codes:
+
+{allowed_codes}
+
+A course is relevant only when the supplied evidence directly or
+substantively discusses the requested topic.
+
+Do NOT count a course merely because:
+- it contains a generic related word;
+- the topic could theoretically apply to that course;
+- the course contains transferable skills;
+- leadership or communication could be useful in the topic;
+- there is only an indirect relationship;
+- the topic is mentioned incidentally;
+- another project happens to be mentioned.
+
+For example, if the question asks which courses discuss project
+management, a leadership course should NOT qualify merely because
+leadership or communication can be used during projects.
+
+Return ONLY relevant course codes separated by commas.
+
+If no course is supported, return exactly:
+
+NONE
+
+Do not explain your answer.
+"""
+
+    user_message = f"""
+USER QUESTION:
+
+{question}
+
+COURSE EVIDENCE:
+
+{course_evidence}
+
+Relevant course codes:
+"""
+
+    response = llm.invoke(
+        [
+            ("system", system_message),
+            ("human", user_message),
+        ]
+    )
+
+    raw_result = (
+        response.content
+        .strip()
+        .upper()
+    )
+
+    if raw_result == "NONE":
+        return []
+
+    relevant_courses = []
+
+    for course in COURSE_CODES:
+        if course.upper() in raw_result:
+            relevant_courses.append(
+                course
+            )
+
+    return [
+        source
+        for source in sources
+        if source["metadata"]["course"]
+        in relevant_courses
+    ]
+
 
 def retrieve_for_question(
-    question,
+    standalone_question,
     collection,
     embedding_model,
     reranker,
     rag_chunk_lookup,
+    llm,
 ):
-
     query_type = detect_query_type(
-        question
+        standalone_question
     )
 
     if query_type == "broad":
-
         sources = retrieve_broad(
-            question,
+            standalone_question,
             collection,
             embedding_model,
             reranker,
             rag_chunk_lookup,
+        )
+
+        sources = filter_broad_sources_by_relevance(
+            standalone_question,
+            sources,
+            llm,
         )
 
     else:
-
         sources = retrieve_focused(
-            question,
+            standalone_question,
             collection,
             embedding_model,
             reranker,
             rag_chunk_lookup,
         )
 
-    return (
-        query_type,
-        sources,
-    )
+    return query_type, sources
 
 
 # ============================================================
-# 15. BUILD CONTEXT
+# CONTEXT + CITATIONS
 # ============================================================
 
-def build_context(
-    retrieved_results,
-):
+def build_context(sources):
+    if not sources:
+        return (
+            "No supporting document evidence was found."
+        )
 
     context_parts = []
 
-    for i, result in enumerate(
-        retrieved_results,
+    for i, source in enumerate(
+        sources,
         start=1,
     ):
-
-        metadata = result[
-            "metadata"
-        ]
+        metadata = source["metadata"]
 
         context_parts.append(
-            f"""SOURCE {i}
+            f"""
+SOURCE {i}
 
 Course: {metadata["course"]}
 Course Title: {metadata["chapter"]}
 PDF Page: {metadata["pdf_page"]}
 
-{result["document"]}"""
+{source["document"]}
+""".strip()
         )
 
     return "\n\n".join(
@@ -944,16 +968,68 @@ PDF Page: {metadata["pdf_page"]}
     )
 
 
-# ============================================================
-# 16. DETERMINISTIC CITATIONS
-# ============================================================
+def deduplicate_citation_blocks(answer):
+    citation_pattern = (
+        r"\[[A-Za-z0-9/-]+,\s*"
+        r"PDF page\s*\d+\]"
+    )
+
+    block_pattern = (
+        rf"(?:{citation_pattern}\s*){{2,}}"
+    )
+
+    def clean_block(match):
+        block = match.group(0)
+
+        citations = re.findall(
+            citation_pattern,
+            block,
+            flags=re.IGNORECASE,
+        )
+
+        unique = []
+
+        for citation in citations:
+            if citation not in unique:
+                unique.append(
+                    citation
+                )
+
+        return " ".join(unique)
+
+    return re.sub(
+        block_pattern,
+        clean_block,
+        answer,
+        flags=re.IGNORECASE,
+    )
+
+
+def remove_conflicting_refusal(answer):
+    answer = answer.strip()
+
+    if answer == REFUSAL_MESSAGE:
+        return answer
+
+    if REFUSAL_MESSAGE in answer:
+        answer = answer.replace(
+            REFUSAL_MESSAGE,
+            "",
+        )
+
+        answer = re.sub(
+            r"\n{3,}",
+            "\n\n",
+            answer,
+        ).strip()
+
+    return answer
+
 
 def replace_source_markers(
     answer,
-    retrieved_results,
+    sources,
 ):
-
-    # Remove any direct course/page citation the LLM created.
     answer = re.sub(
         r"\[[A-Za-z0-9/-]+\s*,\s*PDF page\s*\d+\]",
         "",
@@ -963,14 +1039,11 @@ def replace_source_markers(
 
     source_map = {}
 
-    for i, result in enumerate(
-        retrieved_results,
+    for i, source in enumerate(
+        sources,
         start=1,
     ):
-
-        metadata = result[
-            "metadata"
-        ]
+        metadata = source["metadata"]
 
         source_map[i] = (
             f"[{metadata['course']}, "
@@ -978,10 +1051,7 @@ def replace_source_markers(
             f"{metadata['pdf_page']}]"
         )
 
-    def replace_marker(
-        match,
-    ):
-
+    def replace_marker(match):
         source_number = int(
             match.group(1)
         )
@@ -998,6 +1068,14 @@ def replace_source_markers(
         flags=re.IGNORECASE,
     )
 
+    answer = deduplicate_citation_blocks(
+        answer
+    )
+
+    answer = remove_conflicting_refusal(
+        answer
+    )
+
     answer = re.sub(
         r"[ \t]{2,}",
         " ",
@@ -1008,172 +1086,167 @@ def replace_source_markers(
 
 
 # ============================================================
-# 17. GENERATE ANSWER
+# GENERATION
 # ============================================================
 
 def generate_answer(
     question,
+    standalone_question,
     query_type,
-    retrieved_results,
+    sources,
+    conversation_history,
     llm,
 ):
+    if (
+        query_type == "broad"
+        and not sources
+    ):
+        return REFUSAL_MESSAGE
 
-    context = build_context(
-        retrieved_results
+    document_context = build_context(
+        sources
+    )
+
+    conversation_text = format_conversation_history(
+        conversation_history
     )
 
     if query_type == "broad":
-
-        task_rules = """
+        retrieval_rules = """
 This is a BROAD portfolio question.
 
-Evidence has been retrieved separately from EVERY MBA course.
+A separate evidence relevance check already removed courses that
+do not substantively discuss the requested topic.
 
-Rules for broad questions:
-- Evaluate each course separately.
-- Include a course ONLY when its retrieved text directly supports the user's topic.
-- Do not say a course is irrelevant merely because another course is more relevant.
-- Do not claim "only one course" unless the supplied evidence from the other courses does not support the topic.
-- When listing courses, provide the course code, course title, how the topic is discussed, and the relevant PDF page when requested.
-- Put a source marker after each supported course or major claim.
+Discuss ONLY courses present in the retrieved context.
+Do not add indirect relationships.
+Do not infer another course might be related.
+Do not append the refusal after a supported answer.
+Use [SOURCE N] after supported factual statements.
 """
-
     else:
-
-        task_rules = """
+        retrieval_rules = """
 This is a FOCUSED question.
 
-Use the strongest retrieved evidence to answer directly and concisely.
-Put a source marker after the factual claim it supports.
+Answer directly using the strongest retrieved evidence.
+Use [SOURCE N] after supported factual statements.
+Do not append the refusal after a supported answer.
 """
 
     system_message = f"""
-You are a question-answering assistant for an MBA academic portfolio.
+You are a conversational question-answering assistant for an MBA
+academic portfolio.
 
-Answer using ONLY the retrieved document context.
+Conversation history helps interpret follow-up questions, but
+factual answers must be supported by newly retrieved document
+context.
 
-{task_rules}
+{retrieval_rules}
 
-Citation rules:
-1. NEVER create a course/page citation yourself.
-2. NEVER write citations like [C200, PDF page 10].
-3. Cite evidence ONLY with the exact source marker format:
-   [SOURCE 1]
-   [SOURCE 2]
-   [SOURCE 3]
-4. Use only source numbers that appear in the retrieved context.
-5. Python will convert the source markers to real course/page citations after you answer.
+CITATION RULES:
+1. Never create course/page citations yourself.
+2. Never write citations such as [C200, PDF page 10].
+3. Cite evidence only with [SOURCE N] markers.
+4. Use only SOURCE numbers present in the context.
+5. Python converts source markers to trusted course/page metadata.
 
-Grounding rules:
+REFUSAL RULE:
+Use this sentence ONLY when no retrieved evidence can answer:
+
+{REFUSAL_MESSAGE}
+
+GROUNDING RULES:
 1. Do not use outside knowledge.
-2. Do not invent information.
-3. If the retrieved context does not contain enough information to answer, say exactly:
-   I don't have enough information in the provided document to answer that.
-4. Do not mention embeddings, vectors, ChromaDB, reranking, or chunks.
+2. Do not invent facts.
+3. Use retrieved document context for factual claims.
+4. Answer the current user question.
 """
 
     user_message = f"""
-Retrieved document context:
+CONVERSATION HISTORY:
 
-{context}
+{conversation_text}
 
-Question:
+CURRENT USER QUESTION:
 
 {question}
+
+STANDALONE RETRIEVAL QUESTION:
+
+{standalone_question}
+
+RETRIEVED DOCUMENT CONTEXT:
+
+{document_context}
+
+Answer the current user question:
 """
 
     response = llm.invoke(
         [
-            (
-                "system",
-                system_message,
-            ),
-            (
-                "human",
-                user_message,
-            ),
+            ("system", system_message),
+            ("human", user_message),
         ]
     )
 
-    raw_answer = (
-        response.content.strip()
+    return replace_source_markers(
+        response.content.strip(),
+        sources,
     )
-
-    final_answer = replace_source_markers(
-        raw_answer,
-        retrieved_results,
-    )
-
-    return final_answer
 
 
 # ============================================================
-# 18. COMPLETE RAG FUNCTION
+# COMPLETE CONVERSATIONAL RAG
 # ============================================================
 
 def ask_rag(
     question,
+    conversation_history,
     collection,
     embedding_model,
     reranker,
     rag_chunk_lookup,
     llm,
 ):
+    standalone_question = contextualize_question(
+        question,
+        conversation_history,
+        llm,
+    )
 
-    query_type, sources = (
-        retrieve_for_question(
-            question,
-            collection,
-            embedding_model,
-            reranker,
-            rag_chunk_lookup,
-        )
+    query_type, sources = retrieve_for_question(
+        standalone_question,
+        collection,
+        embedding_model,
+        reranker,
+        rag_chunk_lookup,
+        llm,
     )
 
     answer = generate_answer(
         question,
+        standalone_question,
         query_type,
         sources,
+        conversation_history,
         llm,
     )
 
     return (
         answer,
         sources,
+        query_type,
+        standalone_question,
     )
 
 
-# ============================================================
-# 19. CLI TEST
-# ============================================================
-
-def main():
-
-    if not PDF_FILE.exists():
-
-        raise FileNotFoundError(
-            "\nMBA PDF not found.\n"
-            f"Expected path:\n{PDF_FILE}\n"
-        )
-
-    print(
-        "Loading embedding model..."
-    )
-
+def initialize_rag():
     embedding_model = SentenceTransformer(
         EMBEDDING_MODEL
     )
 
-    print(
-        "Loading reranker..."
-    )
-
     reranker = CrossEncoder(
         RERANKER_MODEL
-    )
-
-    print(
-        "Connecting to Ollama..."
     )
 
     llm = ChatOllama(
@@ -1184,10 +1257,7 @@ def main():
     rag_chunks = load_and_chunk_pdf()
 
     rag_chunk_lookup = {
-        chunk.metadata[
-            "rag_chunk_number"
-        ]:
-            chunk
+        chunk.metadata["rag_chunk_number"]: chunk
         for chunk in rag_chunks
     }
 
@@ -1196,90 +1266,87 @@ def main():
         embedding_model,
     )
 
-    print(
-        "\nRAG V8 is ready."
-    )
+    return {
+        "embedding_model": embedding_model,
+        "reranker": reranker,
+        "llm": llm,
+        "rag_chunks": rag_chunks,
+        "rag_chunk_lookup": rag_chunk_lookup,
+        "collection": collection,
+    }
 
-    question = input(
-        "\nAsk a question: "
-    ).strip()
 
-    if not question:
+# ============================================================
+# CLI CONVERSATION
+# ============================================================
 
-        question = (
-            "Identify all courses in my MBA portfolio "
-            "that discuss project management. "
-            "For each course, provide the course code, "
-            "course title, how project management is discussed, "
-            "and the PDF page number."
+def main():
+    print("\nLoading RAG V9...")
+
+    rag = initialize_rag()
+
+    print("\nRAG V9 ready.")
+    print("Type 'exit' to stop.")
+    print("Type 'clear' to erase conversation memory.")
+
+    conversation_history = []
+
+    while True:
+        question = input(
+            "\nYou: "
+        ).strip()
+
+        if not question:
+            continue
+
+        if question.lower() == "exit":
+            break
+
+        if question.lower() == "clear":
+            conversation_history = []
+            print("Conversation memory cleared.")
+            continue
+
+        (
+            answer,
+            sources,
+            query_type,
+            standalone_question,
+        ) = ask_rag(
+            question,
+            conversation_history,
+            rag["collection"],
+            rag["embedding_model"],
+            rag["reranker"],
+            rag["rag_chunk_lookup"],
+            rag["llm"],
         )
 
-    query_type = detect_query_type(
-        question
-    )
-
-    print(
-        "\nQuery type:",
-        query_type,
-    )
-
-    answer, sources = ask_rag(
-        question,
-        collection,
-        embedding_model,
-        reranker,
-        rag_chunk_lookup,
-        llm,
-    )
-
-    print(
-        "\n"
-        + "=" * 70
-    )
-
-    print(
-        "ANSWER"
-    )
-
-    print(
-        "=" * 70
-    )
-
-    print(
-        answer
-    )
-
-    print(
-        "\n"
-        + "=" * 70
-    )
-
-    print(
-        "RETRIEVED SOURCES"
-    )
-
-    print(
-        "=" * 70
-    )
-
-    for i, result in enumerate(
-        sources,
-        start=1,
-    ):
-
-        metadata = result[
-            "metadata"
-        ]
+        print(
+            "\nStandalone retrieval question:"
+        )
+        print(standalone_question)
 
         print(
-            f"\nSource {i}: "
-            f"{metadata['course']} | "
-            f"{metadata['chapter']} | "
-            f"PDF page "
-            f"{metadata['pdf_page']} | "
-            f"{result['retrieval_source']} | "
-            f"score "
-            f"{result['reranker_score']:.4f}"
+            "\nRetrieval mode:",
+            query_type,
+        )
+
+        print("\nAssistant:")
+        print(answer)
+
+        conversation_history.append(
+            {
+                "role": "user",
+                "content": question,
+            }
+        )
+
+        conversation_history.append(
+            {
+                "role": "assistant",
+                "content": answer,
+            }
         )
 
 
