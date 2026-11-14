@@ -10,6 +10,24 @@ feature/mba-rag-v9-conversational-memory
 
 V9 is built directly on the validated V8 branch.
 
+
+## 🎬 Animated V9 Architecture
+
+<p align="center">
+  <img
+    src="docs/rag-v9-conversational-memory-architecture.svg"
+    alt="RAG V9 Streamlit Conversational Memory Architecture"
+    width="100%"
+  />
+</p>
+
+<p align="center">
+  <strong>PDF → preprocessing → MiniLM → ChromaDB → conversation memory → query rewrite → focused/broad retrieval → CrossEncoder → Ollama → deterministic citations → final answer → memory loop</strong>
+</p>
+
+> **Interactive view:** [Open the full animated V9 architecture](docs/rag-v9-conversational-memory-architecture.svg)
+
+
 ## What V9 adds
 
 V9 turns the MBA RAG application from a single-question assistant into a conversational RAG system.
@@ -26,9 +44,6 @@ It adds:
 - citation deduplication;
 - grounded refusal protection.
 
-## Architecture
-
-![RAG V9 Conversational Memory Architecture](docs/rag-v9-conversational-memory-architecture.svg)
 
 ## Conversational flow
 
