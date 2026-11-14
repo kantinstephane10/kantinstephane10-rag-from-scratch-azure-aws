@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1500" viewBox="0 0 1400 1500">
+  <defs>
+    <style>
+      .title { font: 700 42px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 21px Arial, sans-serif; fill: #475569; }
+      .section { font: 700 24px Arial, sans-serif; fill: #1e293b; }
+      .boxTitle { font: 700 22px Arial, sans-serif; fill: #0f172a; }
+      .boxText { font: 400 18px Arial, sans-serif; fill: #334155; }
+      .small { font: 400 16px Arial, sans-serif; fill: #475569; }
+      .arrow { stroke: #475569; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .link { stroke: #2563eb; stroke-width: 3; stroke-dasharray: 9 8; fill: none; marker-end: url(#arrowheadBlue); }
+    </style>
+    <marker id="arrowhead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowheadBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#2563eb"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="1500" fill="#f8fafc"/>
+  <text x="700" y="70" text-anchor="middle" class="title">RAG From Scratch — Azure &amp; AWS</text>
+  <text x="700" y="108" text-anchor="middle" class="subtitle">Original end-to-end local RAG architecture</text>
+
+  <text x="350" y="165" text-anchor="middle" class="section">Knowledge Base Preparation</text>
+  <text x="1050" y="165" text-anchor="middle" class="section">Question Answering</text>
+
+  <!-- Left lane -->
+  <g>
+    <rect x="120" y="210" width="460" height="100" rx="18" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <text x="350" y="250" text-anchor="middle" class="boxTitle">Azure / AWS TXT Document</text>
+    <text x="350" y="280" text-anchor="middle" class="boxText">Custom cloud training knowledge base</text>
+
+    <line x1="350" y1="310" x2="350" y2="350" class="arrow"/>
+
+    <rect x="120" y="350" width="460" height="100" rx="18" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+    <text x="350" y="390" text-anchor="middle" class="boxTitle">TextLoader + Cleaning</text>
+    <text x="350" y="420" text-anchor="middle" class="boxText">Load and normalize source text</text>
+
+    <line x1="350" y1="450" x2="350" y2="490" class="arrow"/>
+
+    <rect x="120" y="490" width="460" height="115" rx="18" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+    <text x="350" y="530" text-anchor="middle" class="boxTitle">Recursive Character Chunking</text>
+    <text x="350" y="560" text-anchor="middle" class="boxText">Split knowledge into overlapping chunks</text>
+    <text x="350" y="586" text-anchor="middle" class="small">LangChain RecursiveCharacterTextSplitter</text>
+
+    <line x1="350" y1="605" x2="350" y2="645" class="arrow"/>
+
+    <rect x="120" y="645" width="460" height="115" rx="18" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+    <text x="350" y="687" text-anchor="middle" class="boxTitle">Hugging Face Embeddings</text>
+    <text x="350" y="717" text-anchor="middle" class="boxText">all-MiniLM-L6-v2</text>
+    <text x="350" y="744" text-anchor="middle" class="small">384-dimensional semantic vectors</text>
+
+    <line x1="350" y1="760" x2="350" y2="800" class="arrow"/>
+
+    <rect x="120" y="800" width="460" height="110" rx="18" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+    <text x="350" y="843" text-anchor="middle" class="boxTitle">ChromaDB Vector Database</text>
+    <text x="350" y="875" text-anchor="middle" class="boxText">Persistent local vector storage</text>
+  </g>
+
+  <!-- Right lane -->
+  <g>
+    <rect x="820" y="210" width="460" height="100" rx="18" fill="#e0e7ff" stroke="#4f46e5" stroke-width="2"/>
+    <text x="1050" y="250" text-anchor="middle" class="boxTitle">User Question</text>
+    <text x="1050" y="280" text-anchor="middle" class="boxText">Natural-language query</text>
+
+    <line x1="1050" y1="310" x2="1050" y2="350" class="arrow"/>
+
+    <rect x="820" y="350" width="460" height="100" rx="18" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+    <text x="1050" y="390" text-anchor="middle" class="boxTitle">Question Embedding</text>
+    <text x="1050" y="420" text-anchor="middle" class="boxText">Same MiniLM embedding model</text>
+
+    <line x1="1050" y1="450" x2="1050" y2="490" class="arrow"/>
+
+    <rect x="820" y="490" width="460" height="110" rx="18" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+    <text x="1050" y="532" text-anchor="middle" class="boxTitle">Semantic Vector Search</text>
+    <text x="1050" y="565" text-anchor="middle" class="boxText">Retrieve Top-K relevant chunks</text>
+
+    <line x1="1050" y1="600" x2="1050" y2="640" class="arrow"/>
+
+    <rect x="820" y="640" width="460" height="100" rx="18" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+    <text x="1050" y="680" text-anchor="middle" class="boxTitle">Context Construction</text>
+    <text x="1050" y="710" text-anchor="middle" class="boxText">Question + retrieved chunks</text>
+
+    <line x1="1050" y1="740" x2="1050" y2="780" class="arrow"/>
+
+    <rect x="820" y="780" width="460" height="115" rx="18" fill="#fae8ff" stroke="#a21caf" stroke-width="2"/>
+    <text x="1050" y="822" text-anchor="middle" class="boxTitle">Local Hugging Face LLM</text>
+    <text x="1050" y="853" text-anchor="middle" class="boxText">Qwen2.5-0.5B-Instruct</text>
+    <text x="1050" y="879" text-anchor="middle" class="small">Generate answer from retrieved context</text>
+
+    <line x1="1050" y1="895" x2="1050" y2="935" class="arrow"/>
+
+    <rect x="820" y="935" width="460" height="110" rx="18" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+    <text x="1050" y="977" text-anchor="middle" class="boxTitle">Grounded Answer</text>
+    <text x="1050" y="1009" text-anchor="middle" class="boxText">Response based on retrieved knowledge</text>
+  </g>
+
+  <!-- Cross-lane connection -->
+  <path d="M580 855 C700 855, 700 545, 820 545" class="link"/>
+  <text x="700" y="690" text-anchor="middle" class="small">Vector similarity lookup</text>
+
+  <!-- Principle -->
+  <rect x="160" y="1120" width="1080" height="220" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="700" y="1170" text-anchor="middle" class="section">Core RAG Principle</text>
+  <text x="700" y="1215" text-anchor="middle" class="boxText">The LLM does not receive the entire knowledge base.</text>
+  <text x="700" y="1255" text-anchor="middle" class="boxText">Only the most relevant retrieved chunks are added to the prompt.</text>
+  <text x="700" y="1300" text-anchor="middle" class="small">Local-first • Free/open models • ChromaDB persistence • Grounded generation</text>
+
+  <text x="700" y="1440" text-anchor="middle" class="small">Architecture diagram stored as SVG so GitHub can render it directly.</text>
+</svg>
