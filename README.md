@@ -1,179 +1,186 @@
-# RAG From Scratch — Azure & AWS
+# RAG From Scratch — Working MBA RAG Branch
 
-A hands-on Retrieval-Augmented Generation (RAG) project built from scratch with Python, LangChain document utilities, Hugging Face embeddings, ChromaDB, and a small local Hugging Face instruction model.
+This branch contains the current working end-to-end RAG pipeline built during the learning project.
 
-The project uses a custom Azure and AWS cloud knowledge base and demonstrates the complete RAG learning path from raw text to a grounded answer.
+It uses a private local MBA portfolio PDF as the knowledge source, but **the PDF is intentionally not stored in this repository**.
 
-## Architecture
-
-![End-to-End RAG Architecture](docs/rag-architecture.png)
-
-
-## What I Built
-
-This project implements the full RAG workflow step by step:
+## Branch
 
 ```text
-Azure/AWS TXT Document
-        ↓
-Document Loading
-        ↓
-Text Cleaning
-        ↓
-Recursive Chunking
-        ↓
-Hugging Face Embeddings
-all-MiniLM-L6-v2
-        ↓
-ChromaDB Vector Database
-        ↓
-User Question
-        ↓
-Question Embedding
-        ↓
-Semantic Vector Search
-        ↓
-Top-K Relevant Chunks
-        ↓
-Context + Question
-        ↓
-Hugging Face LLM
-Qwen2.5-0.5B-Instruct
-        ↓
-Grounded Answer
+feature/mba-rag-v4-ollama
 ```
 
-## Learning Achievement
+## Current Architecture
 
-By building this project from scratch, I practiced and understood:
+```text
+Private Local PDF
+       ↓
+PyMuPDFLoader
+       ↓
+Text Cleaning
+       ↓
+Course / Chapter / Page Metadata
+       ↓
+RecursiveCharacterTextSplitter
+800 characters / 120 overlap
+       ↓
+Front-Matter + Boilerplate Filtering
+       ↓
+Hugging Face MiniLM Embeddings
+all-MiniLM-L6-v2
+       ↓
+ChromaDB
+       ↓
+User Question
+       ↓
+Question Embedding
+       ↓
+Top-8 Semantic Retrieval
+       ↓
+CrossEncoder Reranking
+ms-marco-MiniLM-L6-v2
+       ↓
+Best 3 Chunks
+       ↓
+Context Construction
+       ↓
+Ollama
+qwen3:4b-instruct
+       ↓
+Grounded Answer
+       ↓
+Course + PDF Page Citation
+```
 
-- document ingestion with LangChain `TextLoader`
-- text parsing and cleaning
-- recursive text chunking and chunk overlap
-- LangChain `Document` objects and metadata
-- sentence embeddings and 384-dimensional vectors
-- semantic similarity and vector search
-- persistent vector storage with ChromaDB
-- Top-K retrieval
-- context construction
-- Retrieval-Augmented Generation
-- grounding an LLM response in retrieved source material
-- using free/local Hugging Face models without an OpenAI API
+## Privacy
 
-## Technology Stack
+The source PDF is private and must remain local.
 
-- Python 3.12+
-- uv
-- LangChain Community
-- LangChain Text Splitters
-- Sentence Transformers
-- Hugging Face Transformers
-- ChromaDB
-- PyTorch
+The repository ignores:
 
-### Embedding Model
+```text
+*.pdf
+data/text_files/pdf/
+chroma_db_*/
+```
+
+Do not commit personal PDFs or local ChromaDB files.
+
+## Local PDF Location
+
+Create this folder locally:
+
+```text
+data/
+└── text_files/
+    └── pdf/
+```
+
+Place the private PDF there using this filename:
+
+```text
+WGU_MBA_IT_Management_Bound_Edition_Biography_At_Beginning.pdf
+```
+
+The file will remain ignored by Git.
+
+## Models
+
+### Embeddings
 
 ```text
 sentence-transformers/all-MiniLM-L6-v2
 ```
 
-This model converts each text chunk and user question into a 384-dimensional vector.
+384-dimensional local embeddings.
 
-### Generation Model
-
-```text
-Qwen/Qwen2.5-0.5B-Instruct
-```
-
-The small instruction model keeps this learning project accessible on machines where larger local models may be slow.
-
-## Project Structure
+### Reranker
 
 ```text
-.
-├── data/
-│   └── azure_aws_cloud_rag_training_20_pages.txt
-├── src/
-│   └── rag_pipeline.py
-├── .gitignore
-├── pyproject.toml
-└── README.md
+cross-encoder/ms-marco-MiniLM-L6-v2
 ```
 
-The generated local ChromaDB directory is intentionally excluded from Git. It is recreated by running the pipeline.
+The system retrieves eight candidates from ChromaDB and reranks them to the best three.
+
+### Answer Generation
+
+```text
+qwen3:4b-instruct
+```
+
+The generation model runs locally through Ollama.
 
 ## Setup
 
-Clone the repository:
+Install Python 3.12+ and `uv`.
 
-```bash
+```powershell
 git clone https://github.com/kantinstephane10/kantinstephane10-rag-from-scratch-azure-aws.git
+
 cd kantinstephane10-rag-from-scratch-azure-aws
-```
 
-Install dependencies with uv:
+git switch feature/mba-rag-v4-ollama
 
-```bash
 uv sync
 ```
 
-Run the RAG pipeline:
+Install Ollama separately, then pull the model:
 
-```bash
+```powershell
+ollama pull qwen3:4b-instruct
+```
+
+Confirm it exists:
+
+```powershell
+ollama list
+```
+
+## Run
+
+After placing the private PDF in the local ignored folder:
+
+```powershell
 uv run python src/rag_pipeline.py
 ```
 
-The first run may download the Hugging Face embedding and generation models.
-
-## Example Question
+The CLI will ask:
 
 ```text
-How does Azure provide private connectivity to storage?
+Ask a question about the MBA document:
 ```
 
-The system:
-
-1. embeds the question,
-2. searches ChromaDB,
-3. retrieves the most relevant Azure/AWS chunks,
-4. combines them into context,
-5. sends only that context and the question to the LLM.
-
-A grounded answer should identify **Azure Private Endpoint** as the direct method described in the training document.
-
-## Key RAG Principle
-
-The LLM does **not** receive the entire knowledge base.
+Example:
 
 ```text
-Question
-   ↓
-Vector Search
-   ↓
-Relevant Chunks Only
-   ↓
-LLM
+What are my five CliftonStrengths?
 ```
 
-This is the core idea behind Retrieval-Augmented Generation.
+A working answer should be grounded in the retrieved document and include a source citation such as:
 
-## Current Scope
+```text
+My five CliftonStrengths are Learner, Strategic, Belief,
+Context, and Deliberative. [C200, PDF page 10]
+```
 
-This repository demonstrates a foundational local RAG system for learning and experimentation.
+## Current RAG Features
 
-Future improvements can include:
+- PDF loading with PyMuPDF
+- text cleaning
+- recursive character chunking
+- 800-character chunks
+- 120-character overlap
+- course/chapter/page metadata
+- front-matter exclusion
+- low-value boilerplate filtering
+- local Hugging Face embeddings
+- persistent ChromaDB vector storage
+- semantic Top-K retrieval
+- CrossEncoder reranking
+- local Ollama generation
+- grounded prompting
+- course and PDF-page citations
 
-- PDF, Word, CSV, Excel, and database ingestion
-- source citations in generated answers
-- retrieval quality evaluation
-- metadata filtering
-- reranking
-- a Streamlit interface
-- Ollama as an alternative generation backend
-- LangChain retriever abstractions
-- conversational memory
-- production API deployment
+## Next Step
 
-## Author
-
-Built as a hands-on learning project to understand RAG architecture from first principles rather than relying on a prebuilt end-to-end chain.
+The next milestone is **RAG evaluation** across all six MBA courses before adding a Streamlit interface or agent capabilities.
