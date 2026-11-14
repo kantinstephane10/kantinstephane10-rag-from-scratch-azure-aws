@@ -1,50 +1,125 @@
-# RAG From Scratch — MBA RAG V8
+# RAG From Scratch — MBA RAG V9
 
-This branch contains **RAG V8: Query-Aware Retrieval + Deterministic Citations**.
+This branch contains **RAG V9: Conversational Memory + Query-Aware Retrieval**.
 
 ## Branch
 
 ```text
-feature/mba-rag-v8-query-aware-retrieval
+feature/mba-rag-v9-conversational-memory
 ```
 
-## What V8 adds
+V9 is built directly on the validated V8 branch.
 
-V8 fixes two issues discovered while testing the Streamlit RAG application:
+## What V9 adds
 
-1. **Broad portfolio questions** need wider, course-aware retrieval instead of only global Top-K retrieval.
-2. **Citations must come from trusted metadata**, not from the LLM.
+V9 turns the MBA RAG application from a single-question assistant into a conversational RAG system.
+
+It adds:
+
+- recent conversation history;
+- follow-up question rewriting;
+- standalone retrieval queries;
+- focused vs. broad query routing;
+- course-aware broad retrieval;
+- strict course relevance filtering;
+- deterministic citations from Python metadata;
+- citation deduplication;
+- grounded refusal protection.
 
 ## Architecture
 
-![RAG V8 Architecture](docs/rag-v8-query-aware-architecture.svg)
+![RAG V9 Conversational Memory Architecture](docs/rag-v9-conversational-memory-architecture.svg)
 
-## Pipeline
-
-### Focused questions
+## Conversational flow
 
 ```text
-Question
-→ MiniLM embedding
-→ ChromaDB Top 8
-→ same-course neighbor expansion ±1
-→ CrossEncoder reranking
-→ best 3
-→ Ollama
-→ deterministic citations
+Conversation history
+        +
+Current question
+        ↓
+Follow-up question rewriter
+        ↓
+Standalone retrieval question
+        ↓
+Query router
+       / \
+Focused   Broad
+   ↓        ↓
+Top 8      Search all 6 courses
+   ↓        ↓
+Neighbor   Neighbor
+   ↓        ↓
+Rerank     Rerank
+   ↓        ↓
+Best 3     Course relevance gate
+       \  /
+        ↓
+Retrieved evidence
+        ↓
+Ollama
+        ↓
+[SOURCE N]
+        ↓
+Python metadata citations
+        ↓
+Final grounded answer
+        ↓
+Save turn to session memory
 ```
 
-### Broad questions
+## Conversation memory
+
+V9 uses the most recent:
 
 ```text
-Question
-→ query router
-→ search each of the 6 courses independently
-→ neighbor expansion
-→ CrossEncoder reranking
-→ best evidence from each course
-→ Ollama
-→ deterministic citations
+12 messages
+```
+
+which is approximately six user/assistant turns.
+
+Example:
+
+```text
+User:
+What are my five CliftonStrengths?
+
+Assistant:
+Learner, Strategic, Belief, Context, and Deliberative.
+
+User:
+Which one was ranked highest?
+```
+
+V9 rewrites the follow-up internally as:
+
+```text
+Which of my five CliftonStrengths was ranked highest?
+```
+
+and retrieves fresh document evidence before answering.
+
+Conversation history is used to **interpret** the question. It is not treated as a substitute for document evidence.
+
+## Broad-query relevance gate
+
+Searching every course solves portfolio coverage, but it can also surface weak indirect matches.
+
+During Streamlit testing, C200 was initially treated as indirectly related to project management.
+
+V9 therefore adds a strict evidence gate:
+
+```text
+search every course
+→ rerank evidence
+→ evaluate whether the course substantively discusses the topic
+→ remove incidental/indirect matches
+→ generate final answer
+```
+
+Final observed project-management result included only:
+
+```text
+MGT2-KKM1 — Project Management
 ```
 
 ## Models
@@ -53,51 +128,84 @@ Question
 - Reranker: `cross-encoder/ms-marco-MiniLM-L6-v2`
 - Generation: Ollama `qwen3:4b-instruct`
 
-## Chunking
+## Retrieval configuration
 
 ```text
 chunk_size = 800
 chunk_overlap = 120
-semantic Top-K = 8
+
+focused semantic candidates = 8
 neighbor range = ±1
 focused final context = 3
-broad candidates per course = 4
-broad final per course = 2
+
+broad semantic candidates/course = 4
+broad final chunks/course = 2
+
+conversation memory = 12 recent messages
 ```
 
-## Local validation
+## Validation
 
-Observed local regression result:
+Observed conversational notebook result:
 
 ```text
 Tests passed: 9/9
 Accuracy: 100.0%
-V8 LOCAL TEST: PASS
+V9 CONVERSATIONAL MEMORY TEST: PASS
 ```
 
-Full proof: [docs/results/v8-validation.md](docs/results/v8-validation.md)
+The Streamlit UI was also validated for:
 
-Run the regression evaluation:
+- follow-up memory;
+- standalone question rewriting;
+- deterministic citations;
+- broad project-management retrieval;
+- removal of the C200 false positive;
+- grounded stock-price refusal.
+
+Full proof:
+
+[docs/results/v9-validation.md](docs/results/v9-validation.md)
+
+## Run the backend
 
 ```powershell
-uv run python src/rag_v8_evaluation.py
+uv run python src/rag_pipeline.py
 ```
 
-Run Streamlit:
+The CLI accepts multiple questions. Type:
+
+```text
+clear
+```
+
+to erase the current conversation or:
+
+```text
+exit
+```
+
+to quit.
+
+## Run the regression evaluation
+
+```powershell
+uv run python src/rag_v9_evaluation.py
+```
+
+## Run Streamlit
 
 ```powershell
 uv run streamlit run src/streamlit_app.py
 ```
 
-## Important citation design
+## Memory scope
 
-The LLM is instructed to use neutral source markers such as:
+V9 memory is **session memory**.
 
-```text
-[SOURCE 1]
-```
+It remembers recent conversation turns while the current Python / Streamlit session is active. It does not yet persist conversations across application restarts.
 
-Python converts those markers into the course and PDF page stored in retrieval metadata. This prevents the model from inventing a mismatched course/page citation.
+A future milestone can add persistent conversation storage with SQLite.
 
 ## Source document
 
@@ -106,5 +214,3 @@ The MBA portfolio PDF is expected at:
 ```text
 data/text_files/pdf/WGU_MBA_IT_Management_Bound_Edition_Biography_At_Beginning.pdf
 ```
-
-The repository currently contains the source PDF on this project branch.
