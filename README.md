@@ -6,7 +6,7 @@ The project uses a custom Azure and AWS cloud knowledge base and demonstrates th
 
 ## Architecture
 
-![End-to-End RAG Architecture](docs/rag-architecture.png)
+![End-to-End RAG Architecture](docs/rag-architecture.svg)
 
 
 ## What I Built
