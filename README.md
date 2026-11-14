@@ -18,6 +18,78 @@ feature/mba-rag-v4-ollama
 
 The observed successful V4 run is saved in [`docs/results/v4-validation.md`](docs/results/v4-validation.md). It includes the indexing counts, model configuration, retrieved evidence, Ollama answer, and citation.
 
+## Engineering Challenges, Decisions, and Why This Diagram
+
+### Challenge 1 — Move from a small TXT knowledge base to a 143-page PDF
+
+The MBA portfolio is much larger and more structured than the original Azure/AWS training text. It contains front matter, course boundaries, repeated headers, page numbers, legal/copyright text, and six different course sections.
+
+**Decision:** add a PDF-specific ingestion layer:
+
+```text
+PyMuPDFLoader
+→ text cleaning
+→ course/chapter/page metadata
+→ recursive chunking
+```
+
+**Why:** page and course metadata are needed later for reliable citations, while cleaning reduces retrieval noise.
+
+### Challenge 2 — Semantic similarity alone returned noisy chunks
+
+The first retrieval test for:
+
+```text
+What are my five CliftonStrengths?
+```
+
+found the correct answer, but a CliftonStrengths cover page and a copyright/trademark chunk also ranked highly because they contained similar words.
+
+**Decision:** make two changes:
+
+1. remove clearly low-value boilerplate before embedding;
+2. retrieve eight semantic candidates and use a CrossEncoder to rerank them to the best three.
+
+**Why:** the embedding model is good at broad semantic similarity, but the CrossEncoder is better at deciding which candidate actually answers the question.
+
+### Challenge 3 — Local answer generation needed better quality
+
+A small Hugging Face generator was useful for learning, but the MBA portfolio needed a stronger local instruction model.
+
+**Decision:** use Ollama with:
+
+```python
+ChatOllama(
+    model="qwen3:4b-instruct",
+    temperature=0
+)
+```
+
+**Why:** Ollama keeps generation local while Qwen3 provides stronger grounded answers. `temperature=0` makes the response more deterministic for evaluation.
+
+### Challenge 4 — Answers needed traceable sources
+
+A correct answer is more useful when the user can verify where it came from.
+
+**Decision:** include course, chapter, and PDF-page metadata in retrieved context and instruct Ollama to cite the source as:
+
+```text
+[C200, PDF page 10]
+```
+
+### Why the V4 diagram is designed this way
+
+The V4 diagram deliberately shows the full sequence from **private PDF to cited answer**.
+
+It highlights four design boundaries:
+
+- **document preparation** happens before retrieval;
+- **embeddings and ChromaDB** are responsible for search, not generation;
+- **CrossEncoder reranking** sits between retrieval and the LLM because it improves evidence quality;
+- **Ollama is last** because it receives only the best retrieved context and turns that evidence into a readable answer.
+
+The diagram does not show neighbor expansion because that problem had not yet been discovered in V4. V4 represents the architecture that was actually implemented and validated at that milestone.
+
 ## Current Architecture
 
 ```text
