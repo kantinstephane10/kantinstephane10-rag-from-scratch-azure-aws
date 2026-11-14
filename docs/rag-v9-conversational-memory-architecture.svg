@@ -1,65 +1,343 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1040" viewBox="0 0 1700 1040">
-  <rect width="1700" height="1040" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120">
+<defs>
+  <linearGradient id="blueBG" x1="0" x2="1"><stop offset="0" stop-color="#edf6ff"/><stop offset="1" stop-color="#f9fcff"/></linearGradient>
+  <linearGradient id="purpleBG" x1="0" x2="1"><stop offset="0" stop-color="#f6f0ff"/><stop offset="1" stop-color="#fcf9ff"/></linearGradient>
+  <linearGradient id="greenBG" x1="0" x2="1"><stop offset="0" stop-color="#eafaf1"/><stop offset="1" stop-color="#f9fff9"/></linearGradient>
+  <linearGradient id="orangeBG" x1="0" x2="1"><stop offset="0" stop-color="#fff4e8"/><stop offset="1" stop-color="#fffaf5"/></linearGradient>
+  <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+    <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#1e3a5f" flood-opacity=".14"/>
+  </filter>
+  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur stdDeviation="4" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L9,3 z" fill="#2563eb"/>
+  </marker>
+  <marker id="arrowPurple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L9,3 z" fill="#7c3aed"/>
+  </marker>
+  <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L9,3 z" fill="#059669"/>
+  </marker>
+  <marker id="arrowOrange" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L9,3 z" fill="#ea580c"/>
+  </marker>
+  <symbol id="pythonLogo" viewBox="0 0 24 24"><path d="M11.858 0c-.978.005-1.913.088-2.736.234C6.7.662 6.26 1.558 6.26 3.21v2.182h5.725v.727H4.111c-1.664 0-3.121 1-3.577 2.903-.526 2.181-.549 3.542 0 5.82.407 1.694 1.379 2.902 3.043 2.902h1.969v-2.616c0-1.89 1.635-3.557 3.576-3.557h5.72c1.591 0 2.862-1.31 2.862-2.91v-5.45c0-1.553-1.309-2.718-2.863-2.977A18 18 0 0 0 11.858 0M8.762 1.755c.591 0 1.074.491 1.074 1.095 0 .601-.483 1.087-1.074 1.087A1.08 1.08 0 0 1 7.688 2.85c0-.604.48-1.095 1.074-1.095m9.656 4.364v2.543c0 1.971-1.671 3.63-3.577 3.63H9.122c-1.566 0-2.862 1.34-2.862 2.91v5.452c0 1.551 1.349 2.464 2.862 2.91 1.813.532 3.55.628 5.72 0 1.44-.418 2.862-1.258 2.862-2.91V18.47h-5.719v-.727h8.582c1.664 0 2.284-1.16 2.862-2.903.598-1.793.573-3.518 0-5.819-.41-1.656-1.196-2.903-2.862-2.903zm-3.216 13.807a1.08 1.08 0 0 1 1.074 1.088c0 .604-.48 1.094-1.074 1.094-.592 0-1.075-.49-1.075-1.094 0-.601.483-1.088 1.075-1.088"/></symbol>
+  <symbol id="streamlitLogo" viewBox="0 0 24 24"><path d="M16.673 11.32l6.862-3.618c.233-.136.554.12.442.387L20.463 17.1zm-8.556-.229l3.473-5.187c.203-.328.578-.316.793-.028l7.886 11.75zm-3.375 7.25c-.28 0-.835-.284-.993-.716l-3.72-9.46c-.118-.331.139-.614.48-.464l19.474 10.306c-.149.147-.453.337-.72.334z"/></symbol>
+  <symbol id="hfLogo" viewBox="0 0 24 24"><path d="M12.025 1.13c-5.77 0-10.449 4.647-10.449 10.378 0 1.112.178 2.181.503 3.185.064-.222.203-.444.416-.577a.96.96 0 0 1 .524-.15c.293 0 .584.124.84.284.278.173.48.408.71.694.226.282.458.611.684.951v-.014c.017-.324.106-.622.264-.874s.403-.487.762-.543c.3-.047.596.06.787.203s.31.313.4.467c.15.257.212.468.233.542.01.026.653 1.552 1.657 2.54.616.605 1.01 1.223 1.082 1.912.055.537-.096 1.059-.38 1.572.637.121 1.294.187 1.967.187.657 0 1.298-.063 1.921-.178-.287-.517-.44-1.041-.384-1.581.07-.69.465-1.307 1.081-1.913 1.004-.987 1.647-2.513 1.657-2.539.021-.074.083-.285.233-.542.09-.154.208-.323.4-.467a1.08 1.08 0 0 1 .787-.203c.359.056.604.29.762.543s.247.55.265.874v.015c.225-.34.457-.67.683-.952.23-.286.432-.52.71-.694.257-.16.547-.284.84-.285a.97.97 0 0 1 .524.151c.228.143.373.388.43.625l.006.04a10.3 10.3 0 0 0 .534-3.273c0-5.731-4.678-10.378-10.449-10.378M8.327 6.583a1.5 1.5 0 0 1 .713.174 1.487 1.487 0 0 1 .617 2.013c-.183.343-.762-.214-1.102-.094-.38.134-.532.914-.917.71a1.487 1.487 0 0 1 .69-2.803m7.486 0a1.487 1.487 0 0 1 .689 2.803c-.385.204-.536-.576-.916-.71-.34-.12-.92.437-1.103.094a1.487 1.487 0 0 1 .617-2.013 1.5 1.5 0 0 1 .713-.174m-10.68 1.55a.96.96 0 1 1 0 1.921.96.96 0 0 1 0-1.92m13.838 0a.96.96 0 1 1 0 1.92.96.96 0 0 1 0-1.92M8.489 11.458c.588.01 1.965 1.157 3.572 1.164 1.607-.007 2.984-1.155 3.572-1.164.196-.003.305.12.305.454 0 .886-.424 2.328-1.563 3.202-.22-.756-1.396-1.366-1.63-1.32q-.011.001-.02.006l-.044.026-.01.008-.03.024q-.018.017-.035.036l-.032.04a1 1 0 0 0-.058.09l-.014.025q-.049.088-.11.19a1 1 0 0 1-.083.116 1.2 1.2 0 0 1-.173.18q-.035.029-.075.058a1.3 1.3 0 0 1-.251-.243 1 1 0 0 1-.076-.107c-.124-.193-.177-.363-.337-.444-.034-.016-.104-.008-.2.022q-.094.03-.216.087-.06.028-.125.063l-.13.074q-.067.04-.136.086a3 3 0 0 0-.135.096 3 3 0 0 0-.26.219 2 2 0 0 0-.12.121 2 2 0 0 0-.106.128l-.002.002a2 2 0 0 0-.09.132l-.001.001a1.2 1.2 0 0 0-.105.212q-.013.036-.024.073c-1.139-.875-1.563-2.317-1.563-3.203 0-.334.109-.457.305-.454"/></symbol>
+  <symbol id="ollamaLogo" viewBox="0 0 24 24"><path d="M16.361 10.26a.894.894 0 0 0-.558.47l-.072.148.001.207c0 .193.004.217.059.353.076.193.152.312.291.448.24.238.51.3.872.205a.86.86 0 0 0 .517-.436.752.752 0 0 0 .08-.498c-.064-.453-.33-.782-.724-.897a1.06 1.06 0 0 0-.466 0zm-9.203.005c-.305.096-.533.32-.65.639a1.187 1.187 0 0 0-.06.52c.057.309.31.59.598.667.362.095.632.033.872-.205.14-.136.215-.255.291-.448.055-.136.059-.16.059-.353l.001-.207-.072-.148a.894.894 0 0 0-.565-.472 1.02 1.02 0 0 0-.474.007Zm4.184 2c-.131.071-.223.25-.195.383.031.143.157.288.353.407.105.063.112.072.117.136.004.038-.01.146-.029.243-.02.094-.036.194-.036.222.002.074.07.195.143.253.064.052.076.054.255.059.164.005.198.001.264-.03.169-.082.212-.234.15-.525-.052-.243-.042-.28.087-.355.137-.08.281-.219.324-.314a.365.365 0 0 0-.175-.48.394.394 0 0 0-.181-.033c-.126 0-.207.03-.355.124l-.085.053-.053-.032c-.219-.13-.259-.145-.391-.143a.396.396 0 0 0-.193.032zm.39-2.195c-.373.036-.475.05-.654.086-.291.06-.68.195-.951.328-.94.46-1.589 1.226-1.787 2.114-.04.176-.045.234-.045.53 0 .294.005.357.043.524.264 1.16 1.332 2.017 2.714 2.173.3.033 1.596.033 1.896 0 1.11-.125 2.064-.727 2.493-1.571.114-.226.169-.372.22-.602.039-.167.044-.23.044-.523 0-.297-.005-.355-.045-.531-.288-1.29-1.539-2.304-3.072-2.497a6.873 6.873 0 0 0-.855-.031zm.645.937a3.283 3.283 0 0 1 1.44.514c.223.148.537.458.671.662.166.251.26.508.303.82.02.143.01.251-.043.482-.08.345-.332.705-.672.957a3.115 3.115 0 0 1-.689.348c-.382.122-.632.144-1.525.138-.582-.006-.686-.01-.853-.042-.57-.107-1.022-.334-1.35-.68-.264-.28-.385-.535-.45-.946-.03-.192.025-.509.137-.776.136-.326.488-.73.836-.963.403-.269.934-.46 1.422-.512.187-.02.586-.02.773-.002"/></symbol>
+  <symbol id="pytorchLogo" viewBox="0 0 24 24"><path d="M12.005 0L4.952 7.053a9.865 9.865 0 000 14.022 9.866 9.866 0 0014.022 0c3.984-3.9 3.986-10.205.085-14.023l-1.744 1.743c2.904 2.905 2.904 7.634 0 10.538s-7.634 2.904-10.538 0-2.904-7.634 0-10.538l4.647-4.646.582-.665zm3.568 3.899a1.327 1.327 0 00-1.327 1.327 1.327 1.327 0 001.327 1.328A1.327 1.327 0 0016.9 5.226 1.327 1.327 0 0015.573 3.9z"/></symbol>
   <style>
-    .t{font-family:Arial,Helvetica,sans-serif;fill:#111827}
-    .h{font-size:34px;font-weight:700}
-    .s{font-size:20px;font-weight:700}
-    .b{font-size:16px}
-    .box{fill:#f8fafc;stroke:#334155;stroke-width:2;rx:16}
-    .blue{fill:#eef2ff;stroke:#4f46e5;stroke-width:2;rx:16}
-    .green{fill:#ecfdf5;stroke:#059669;stroke-width:2;rx:16}
-    .amber{fill:#fffbeb;stroke:#d97706;stroke-width:2;rx:16}
-    .arrow{stroke:#475569;stroke-width:3;fill:none;marker-end:url(#a)}
+    .title{font:700 38px Arial,Helvetica,sans-serif;fill:#102a56}
+    .subtitle{font:400 16px Arial,Helvetica,sans-serif;fill:#475569}
+    .section{font:700 19px Arial,Helvetica,sans-serif;fill:#14396e}
+    .lane{font:700 17px Arial,Helvetica,sans-serif;fill:#fff}
+    .bt{font:700 13.5px Arial,Helvetica,sans-serif;fill:#111827}
+    .bs{font:400 10.5px Arial,Helvetica,sans-serif;fill:#475569}
+    .small{font:600 11px Arial,Helvetica,sans-serif;fill:#334155}
+    .box{fill:#fff;stroke:#77a7d9;stroke-width:1.5;rx:14;filter:url(#shadow)}
+    .boxP{fill:#fff;stroke:#a78bfa;stroke-width:1.5;rx:14;filter:url(#shadow)}
+    .boxG{fill:#fff;stroke:#6cc49b;stroke-width:1.5;rx:14;filter:url(#shadow)}
+    .boxO{fill:#fff;stroke:#f59e0b;stroke-width:1.5;rx:14;filter:url(#shadow)}
+    .flowB{stroke:#2563eb;stroke-width:2.7;fill:none;marker-end:url(#arrowBlue);stroke-dasharray:12 8;animation:dashB 1.1s linear infinite}
+    .flowP{stroke:#7c3aed;stroke-width:2.7;fill:none;marker-end:url(#arrowPurple);stroke-dasharray:12 8;animation:dashP 1.1s linear infinite}
+    .flowG{stroke:#059669;stroke-width:2.7;fill:none;marker-end:url(#arrowGreen);stroke-dasharray:12 8;animation:dashG 1.1s linear infinite}
+    .flowO{stroke:#ea580c;stroke-width:2.7;fill:none;marker-end:url(#arrowOrange);stroke-dasharray:12 8;animation:dashO 1.1s linear infinite}
+    .memoryLoop{stroke:#7c3aed;stroke-width:3;fill:none;marker-end:url(#arrowPurple);stroke-dasharray:7 7;animation:dashP .9s linear infinite}
+    .pulseB{animation:pulseB 2.6s ease-in-out infinite}
+    .pulseP{animation:pulseP 2.6s ease-in-out infinite}
+    .pulseG{animation:pulseG 2.6s ease-in-out infinite}
+    .pulseO{animation:pulseO 2.6s ease-in-out infinite}
+    .dotB{fill:#2563eb;filter:url(#glow)}
+    .dotP{fill:#7c3aed;filter:url(#glow)}
+    .dotG{fill:#059669;filter:url(#glow)}
+    .dotO{fill:#ea580c;filter:url(#glow)}
+    @keyframes dashB{to{stroke-dashoffset:-40}}
+    @keyframes dashP{to{stroke-dashoffset:-40}}
+    @keyframes dashG{to{stroke-dashoffset:-40}}
+    @keyframes dashO{to{stroke-dashoffset:-40}}
+    @keyframes pulseB{0%,100%{stroke-width:1.5}50%{stroke-width:3;stroke:#2563eb}}
+    @keyframes pulseP{0%,100%{stroke-width:1.5}50%{stroke-width:3;stroke:#7c3aed}}
+    @keyframes pulseG{0%,100%{stroke-width:1.5}50%{stroke-width:3;stroke:#059669}}
+    @keyframes pulseO{0%,100%{stroke-width:1.5}50%{stroke-width:3;stroke:#ea580c}}
   </style>
-  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker></defs>
+</defs>
 
-  <text x="70" y="65" class="t h">RAG V9 — Conversational Memory + Course-Aware Grounding</text>
+<rect width="1800" height="1120" fill="#ffffff"/>
+<text x="42" y="48" class="title">RAG V9 – Streamlit Conversational Memory Architecture</text>
+<text x="42" y="76" class="subtitle">Animated end-to-end flow: preprocessing → retrieval → grounded generation → deterministic citations → session memory loop</text>
 
-  <rect x="620" y="100" width="460" height="80" class="blue"/>
-  <text x="850" y="135" text-anchor="middle" class="t s">Current User Question</text>
-  <text x="850" y="160" text-anchor="middle" class="t b">e.g. “Which one was ranked highest?”</text>
+<!-- Brand strip -->
+<g transform="translate(1410 18)">
+  <use href="#pythonLogo" x="0" y="0" width="32" height="32" fill="#3776AB"/>
+  <text x="40" y="22" class="small">Python</text>
+  <use href="#streamlitLogo" x="112" y="0" width="32" height="32" fill="#FF4B4B"/>
+  <text x="152" y="22" class="small">Streamlit</text>
+</g>
 
-  <rect x="90" y="100" width="390" height="80" class="green"/>
-  <text x="285" y="135" text-anchor="middle" class="t s">Conversation History</text>
-  <text x="285" y="160" text-anchor="middle" class="t b">Recent 12 user/assistant messages</text>
+<!-- SECTION 1: INDEXING -->
+<rect x="22" y="104" width="1756" height="184" rx="22" fill="url(#blueBG)" stroke="#7aaee3" stroke-width="1.5"/>
+<rect x="22" y="104" width="250" height="184" rx="22" fill="#2563eb"/>
+<text x="48" y="145" class="lane">Document Preparation</text>
+<text x="48" y="169" class="lane">&amp; Indexing</text>
+<text x="48" y="198" font-family="Arial" font-size="12.5" font-style="italic" fill="#eaf3ff">Offline / build-time pipeline</text>
 
-  <path d="M480 140 L620 140" class="arrow"/>
-  <path d="M850 180 L850 230" class="arrow"/>
+<!-- Indexing boxes -->
+<g class="pulseB">
+  <rect x="300" y="134" width="132" height="112" class="box"/>
+  <path d="M336 153h42l18 18v48h-60z" fill="#fff" stroke="#94a3b8"/><path d="M378 153v19h18" fill="none" stroke="#94a3b8"/>
+  <rect x="342" y="182" width="48" height="24" rx="4" fill="#e11d48"/><text x="366" y="199" text-anchor="middle" font-family="Arial" font-size="13" font-weight="700" fill="#fff">PDF</text>
+  <text x="366" y="232" text-anchor="middle" class="bt">PDF Source</text>
+</g>
 
-  <rect x="600" y="230" width="500" height="95" class="green"/>
-  <text x="850" y="265" text-anchor="middle" class="t s">Follow-Up Question Rewriter</text>
-  <text x="850" y="292" text-anchor="middle" class="t b">Turns ambiguous follow-up into standalone retrieval query</text>
+<rect x="454" y="134" width="132" height="112" class="box"/>
+<use href="#pythonLogo" x="499" y="151" width="40" height="40" fill="#3776AB"/>
+<text x="520" y="212" text-anchor="middle" class="bt">Clean Text</text>
+<text x="520" y="231" text-anchor="middle" class="bs">PyMuPDF + regex</text>
 
-  <path d="M850 325 L850 375" class="arrow"/>
-  <rect x="630" y="375" width="440" height="80" class="blue"/>
-  <text x="850" y="410" text-anchor="middle" class="t s">Query Router</text>
-  <text x="850" y="435" text-anchor="middle" class="t b">Focused vs. Broad</text>
+<rect x="608" y="134" width="132" height="112" class="box"/>
+<use href="#pythonLogo" x="654" y="151" width="40" height="40" fill="#3776AB"/>
+<text x="674" y="212" text-anchor="middle" class="bt">Metadata</text>
+<text x="674" y="231" text-anchor="middle" class="bs">course • page • title</text>
 
-  <path d="M740 455 L440 515" class="arrow"/>
-  <path d="M960 455 L1260 515" class="arrow"/>
+<rect x="762" y="134" width="150" height="112" class="box"/>
+<use href="#pythonLogo" x="817" y="151" width="40" height="40" fill="#3776AB"/>
+<text x="837" y="210" text-anchor="middle" class="bt">Recursive Chunking</text>
+<text x="837" y="229" text-anchor="middle" class="bs">800 chars • overlap 120</text>
 
-  <rect x="120" y="515" width="640" height="260" class="box"/>
-  <text x="440" y="555" text-anchor="middle" class="t s">Focused Retrieval</text>
-  <text x="175" y="600" class="t b">MiniLM question embedding</text>
-  <text x="175" y="635" class="t b">ChromaDB Top 8 semantic candidates</text>
-  <text x="175" y="670" class="t b">Same-course neighbor expansion ±1</text>
-  <text x="175" y="705" class="t b">CrossEncoder reranking → best 3</text>
+<rect x="934" y="134" width="142" height="112" class="box"/>
+<use href="#pythonLogo" x="985" y="151" width="40" height="40" fill="#3776AB"/>
+<text x="1005" y="210" text-anchor="middle" class="bt">Noise Filtering</text>
+<text x="1005" y="229" text-anchor="middle" class="bs">remove low-value chunks</text>
 
-  <rect x="940" y="515" width="640" height="260" class="box"/>
-  <text x="1260" y="555" text-anchor="middle" class="t s">Broad Retrieval</text>
-  <text x="995" y="600" class="t b">Search each of the six MBA courses independently</text>
-  <text x="995" y="635" class="t b">Neighbor expansion + CrossEncoder per course</text>
-  <text x="995" y="670" class="t b">Best evidence per course</text>
-  <text x="995" y="705" class="t b">Strict course relevance gate removes indirect false positives</text>
+<rect x="1098" y="134" width="182" height="112" class="box"/>
+<use href="#hfLogo" x="1120" y="149" width="42" height="42" fill="#FFD21E"/>
+<use href="#pytorchLogo" x="1169" y="151" width="38" height="38" fill="#EE4C2C"/>
+<text x="1189" y="209" text-anchor="middle" class="bt">MiniLM Embeddings</text>
+<text x="1189" y="228" text-anchor="middle" class="bs">all-MiniLM-L6-v2 • 384d</text>
 
-  <path d="M440 775 L700 835" class="arrow"/>
-  <path d="M1260 775 L1000 835" class="arrow"/>
+<g class="pulseB">
+  <rect x="1302" y="134" width="190" height="112" class="box"/>
+  <!-- Chroma-like multicolor database mark -->
+  <circle cx="1340" cy="166" r="13" fill="#f43f5e"/><circle cx="1360" cy="166" r="13" fill="#facc15"/>
+  <circle cx="1340" cy="186" r="13" fill="#22c55e"/><circle cx="1360" cy="186" r="13" fill="#3b82f6"/>
+  <text x="1398" y="174" class="bt">ChromaDB</text>
+  <text x="1398" y="193" class="bs">vector index</text>
+  <text x="1398" y="213" class="bs">351 indexed chunks</text>
+</g>
 
-  <rect x="560" y="835" width="580" height="115" class="amber"/>
-  <text x="850" y="875" text-anchor="middle" class="t s">Grounded Generation</text>
-  <text x="850" y="905" text-anchor="middle" class="t b">Ollama answers from retrieved evidence using [SOURCE N]</text>
-  <text x="850" y="932" text-anchor="middle" class="t b">Python maps trusted metadata, deduplicates citations, preserves valid refusal</text>
+<path id="idxPath" d="M432 190 H454 M586 190 H608 M740 190 H762 M912 190 H934 M1076 190 H1098 M1280 190 H1302" class="flowB"/>
+<circle r="6" class="dotB"><animateMotion dur="5.2s" repeatCount="indefinite" path="M432 190 H1492"/></circle>
 
-  <path d="M850 950 L850 985" class="arrow"/>
-  <text x="850" y="1020" text-anchor="middle" class="t s">Save Turn → Memory for Next Question</text>
+<!-- SECTION 2: CONVERSATION -->
+<rect x="22" y="310" width="1756" height="184" rx="22" fill="url(#purpleBG)" stroke="#b69ae8" stroke-width="1.5"/>
+<rect x="22" y="310" width="250" height="184" rx="22" fill="#7c3aed"/>
+<text x="48" y="351" class="lane">Conversation &amp;</text>
+<text x="48" y="375" class="lane">Query Understanding</text>
+<text x="48" y="404" font-family="Arial" font-size="12.5" font-style="italic" fill="#f3eaff">Runtime / session-aware</text>
+
+<g class="pulseP">
+  <rect x="300" y="340" width="162" height="112" class="boxP"/>
+  <use href="#streamlitLogo" x="332" y="357" width="46" height="46" fill="#FF4B4B"/>
+  <text x="397" y="374" class="bt">User Question</text>
+  <text x="397" y="393" class="bs">Streamlit chat_input</text>
+</g>
+
+<g class="pulseP">
+  <rect x="484" y="340" width="190" height="112" class="boxP"/>
+  <use href="#streamlitLogo" x="508" y="357" width="44" height="44" fill="#FF4B4B"/>
+  <text x="566" y="374" class="bt">Conversation Memory</text>
+  <text x="566" y="393" class="bs">session_state.messages</text>
+  <text x="566" y="412" class="bs">last 12 messages</text>
+</g>
+
+<rect x="696" y="340" width="198" height="112" class="boxP"/>
+<use href="#ollamaLogo" x="720" y="354" width="46" height="46" fill="#111827"/>
+<text x="779" y="371" class="bt">Follow-Up Rewriter</text>
+<text x="779" y="390" class="bs">resolves “it / which one”</text>
+<text x="779" y="409" class="bs">using conversation context</text>
+
+<rect x="916" y="340" width="180" height="112" class="boxP"/>
+<use href="#pythonLogo" x="941" y="356" width="42" height="42" fill="#3776AB"/>
+<text x="994" y="374" class="bt">Standalone Question</text>
+<text x="994" y="393" class="bs">retrieval-ready query</text>
+
+<g class="pulseP">
+  <rect x="1118" y="340" width="180" height="112" class="boxP"/>
+  <use href="#pythonLogo" x="1145" y="356" width="42" height="42" fill="#3776AB"/>
+  <text x="1198" y="374" class="bt">Query Router</text>
+  <text x="1198" y="393" class="bs">focused vs. broad</text>
+</g>
+
+<path d="M462 396 H484 M674 396 H696 M894 396 H916 M1096 396 H1118" class="flowP"/>
+<circle r="6" class="dotP"><animateMotion dur="4.2s" repeatCount="indefinite" path="M462 396 H1298"/></circle>
+
+<!-- SECTION 3: RETRIEVAL -->
+<rect x="22" y="516" width="1756" height="288" rx="22" fill="#fafcfd" stroke="#a8b8c8" stroke-width="1.5"/>
+<text x="48" y="548" class="section">Dual Retrieval Strategy</text>
+
+<!-- router split -->
+<path d="M1208 452 V520 H460 V566" class="flowG"/>
+<path d="M1208 452 V520 H1265 V566" class="flowB"/>
+
+<!-- Focused lane -->
+<rect x="54" y="568" width="760" height="202" rx="18" fill="url(#greenBG)" stroke="#72c79d"/>
+<rect x="54" y="568" width="145" height="202" rx="18" fill="#059669"/>
+<text x="78" y="608" class="lane">Focused</text>
+<text x="78" y="632" class="lane">Question</text>
+<text x="78" y="658" font-family="Arial" font-size="12" fill="#dff9ed">precision path</text>
+
+<rect x="222" y="605" width="126" height="118" class="boxG"/>
+<text x="285" y="637" text-anchor="middle" class="bt">Top 8</text>
+<text x="285" y="657" text-anchor="middle" class="bs">ChromaDB semantic</text>
+<text x="285" y="675" text-anchor="middle" class="bs">candidates</text>
+
+<rect x="370" y="605" width="144" height="118" class="boxG"/>
+<use href="#pythonLogo" x="421" y="620" width="40" height="40" fill="#3776AB"/>
+<text x="442" y="682" text-anchor="middle" class="bt">Neighbor ±1</text>
+<text x="442" y="701" text-anchor="middle" class="bs">same course only</text>
+
+<rect x="536" y="605" width="144" height="118" class="boxG"/>
+<use href="#hfLogo" x="554" y="619" width="38" height="38" fill="#FFD21E"/>
+<use href="#pytorchLogo" x="596" y="620" width="36" height="36" fill="#EE4C2C"/>
+<text x="608" y="682" text-anchor="middle" class="bt">CrossEncoder</text>
+<text x="608" y="701" text-anchor="middle" class="bs">reranking</text>
+
+<g class="pulseG">
+  <rect x="702" y="605" width="90" height="118" class="boxG"/>
+  <text x="747" y="648" text-anchor="middle" class="bt">Best 3</text>
+  <text x="747" y="668" text-anchor="middle" class="bs">final</text>
+  <text x="747" y="686" text-anchor="middle" class="bs">context</text>
+</g>
+
+<path d="M348 664 H370 M514 664 H536 M680 664 H702" class="flowG"/>
+<circle r="5.5" class="dotG"><animateMotion dur="3.8s" repeatCount="indefinite" path="M222 664 H792"/></circle>
+
+<!-- Broad lane -->
+<rect x="842" y="568" width="904" height="202" rx="18" fill="url(#blueBG)" stroke="#7aaee3"/>
+<rect x="842" y="568" width="145" height="202" rx="18" fill="#2563eb"/>
+<text x="866" y="608" class="lane">Broad</text>
+<text x="866" y="632" class="lane">Question</text>
+<text x="866" y="658" font-family="Arial" font-size="12" fill="#e8f3ff">portfolio path</text>
+
+<rect x="1010" y="605" width="150" height="118" class="box"/>
+<text x="1085" y="637" text-anchor="middle" class="bt">Search Every Course</text>
+<text x="1085" y="657" text-anchor="middle" class="bs">4 candidates/course</text>
+<text x="1085" y="675" text-anchor="middle" class="bs">all 6 MBA courses</text>
+
+<rect x="1182" y="605" width="130" height="118" class="box"/>
+<use href="#pythonLogo" x="1227" y="620" width="40" height="40" fill="#3776AB"/>
+<text x="1247" y="682" text-anchor="middle" class="bt">Neighbor ±1</text>
+<text x="1247" y="701" text-anchor="middle" class="bs">same course</text>
+
+<rect x="1334" y="605" width="130" height="118" class="box"/>
+<use href="#hfLogo" x="1352" y="619" width="36" height="36" fill="#FFD21E"/>
+<use href="#pytorchLogo" x="1392" y="620" width="34" height="34" fill="#EE4C2C"/>
+<text x="1399" y="682" text-anchor="middle" class="bt">CrossEncoder</text>
+<text x="1399" y="701" text-anchor="middle" class="bs">reranking</text>
+
+<rect x="1486" y="605" width="130" height="118" class="box"/>
+<text x="1551" y="641" text-anchor="middle" class="bt">Best Evidence</text>
+<text x="1551" y="661" text-anchor="middle" class="bs">per course</text>
+<text x="1551" y="679" text-anchor="middle" class="bs">2 final/course</text>
+
+<g class="pulseB">
+  <rect x="1638" y="605" width="88" height="118" class="box"/>
+  <text x="1682" y="641" text-anchor="middle" class="bt">Relevance</text>
+  <text x="1682" y="661" text-anchor="middle" class="bt">Gate</text>
+  <text x="1682" y="683" text-anchor="middle" class="bs">remove</text>
+  <text x="1682" y="700" text-anchor="middle" class="bs">false positives</text>
+</g>
+
+<path d="M1160 664 H1182 M1312 664 H1334 M1464 664 H1486 M1616 664 H1638" class="flowB"/>
+<circle r="5.5" class="dotB"><animateMotion dur="4.4s" repeatCount="indefinite" path="M1010 664 H1726"/></circle>
+
+<!-- SECTION 4: GENERATION -->
+<rect x="22" y="826" width="1756" height="202" rx="22" fill="url(#orangeBG)" stroke="#f2b56e" stroke-width="1.5"/>
+<rect x="22" y="826" width="250" height="202" rx="22" fill="#ea580c"/>
+<text x="48" y="867" class="lane">Grounded Generation</text>
+<text x="48" y="891" class="lane">&amp; Response Control</text>
+<text x="48" y="919" font-family="Arial" font-size="12.5" font-style="italic" fill="#fff3e8">Both retrieval paths merge here</text>
+
+<!-- merge arrows -->
+<path d="M747 723 V850 H338" class="flowO"/>
+<path d="M1682 723 V850 H338" class="flowO"/>
+
+<g class="pulseO">
+  <rect x="300" y="860" width="180" height="122" class="boxO"/>
+  <use href="#ollamaLogo" x="326" y="878" width="46" height="46" fill="#111827"/>
+  <text x="388" y="896" class="bt">Ollama</text>
+  <text x="388" y="916" class="bs">qwen3:4b-instruct</text>
+  <text x="388" y="936" class="bs">grounded generation</text>
+</g>
+
+<rect x="502" y="860" width="152" height="122" class="boxO"/>
+<text x="578" y="900" text-anchor="middle" class="bt">[SOURCE N]</text>
+<text x="578" y="922" text-anchor="middle" class="bs">neutral source</text>
+<text x="578" y="941" text-anchor="middle" class="bs">markers from LLM</text>
+
+<rect x="676" y="860" width="184" height="122" class="boxO"/>
+<use href="#pythonLogo" x="702" y="878" width="42" height="42" fill="#3776AB"/>
+<text x="756" y="896" class="bt">Python Metadata</text>
+<text x="756" y="916" class="bt">Citations</text>
+<text x="756" y="938" class="bs">trusted course + PDF page</text>
+
+<rect x="882" y="860" width="168" height="122" class="boxO"/>
+<use href="#pythonLogo" x="904" y="878" width="40" height="40" fill="#3776AB"/>
+<text x="955" y="897" class="bt">Citation</text>
+<text x="955" y="917" class="bt">Deduplication</text>
+<text x="955" y="939" class="bs">remove repeated labels</text>
+
+<rect x="1072" y="860" width="206" height="122" class="boxO"/>
+<use href="#pythonLogo" x="1095" y="878" width="40" height="40" fill="#3776AB"/>
+<text x="1146" y="895" class="bt">Conflicting Refusal</text>
+<text x="1146" y="915" class="bt">Cleanup</text>
+<text x="1146" y="938" class="bs">keep only true grounded refusal</text>
+
+<g class="pulseO">
+  <rect x="1300" y="860" width="170" height="122" class="boxO"/>
+  <use href="#streamlitLogo" x="1322" y="878" width="42" height="42" fill="#FF4B4B"/>
+  <text x="1377" y="897" class="bt">Final Answer</text>
+  <text x="1377" y="918" class="bs">with grounded citations</text>
+  <text x="1377" y="939" class="bs">rendered in Streamlit</text>
+</g>
+
+<g class="pulseP">
+  <rect x="1492" y="860" width="244" height="122" class="boxP"/>
+  <use href="#streamlitLogo" x="1516" y="878" width="42" height="42" fill="#FF4B4B"/>
+  <text x="1569" y="896" class="bt">Save Conversation</text>
+  <text x="1569" y="916" class="bt">to Session Memory</text>
+  <text x="1569" y="939" class="bs">user + assistant turn</text>
+</g>
+
+<path d="M480 921 H502 M654 921 H676 M860 921 H882 M1050 921 H1072 M1278 921 H1300 M1470 921 H1492" class="flowO"/>
+<circle r="6" class="dotO"><animateMotion dur="5.6s" repeatCount="indefinite" path="M480 921 H1736"/></circle>
+
+<!-- MEMORY LOOP -->
+<path d="M1614 860 V790 H1760 V380 H674" class="memoryLoop"/>
+<circle r="7" class="dotP">
+  <animateMotion dur="6.5s" repeatCount="indefinite" path="M1614 860 V790 H1760 V380 H674"/>
+</circle>
+<rect x="1370" y="748" width="285" height="42" rx="21" fill="#f4edff" stroke="#a78bfa"/>
+<text x="1512" y="774" text-anchor="middle" class="small">Memory loop → next follow-up question</text>
+
+<!-- Footer -->
+<line x1="42" y1="1050" x2="1758" y2="1050" stroke="#dbe4ee"/>
+<use href="#pythonLogo" x="52" y="1064" width="28" height="28" fill="#3776AB"/>
+<text x="90" y="1083" class="small">Python orchestration</text>
+<use href="#streamlitLogo" x="250" y="1064" width="28" height="28" fill="#FF4B4B"/>
+<text x="288" y="1083" class="small">Streamlit UI + session memory</text>
+<use href="#hfLogo" x="528" y="1064" width="28" height="28" fill="#FFD21E"/>
+<text x="566" y="1083" class="small">Hugging Face MiniLM + CrossEncoder</text>
+<use href="#pytorchLogo" x="876" y="1064" width="28" height="28" fill="#EE4C2C"/>
+<text x="914" y="1083" class="small">PyTorch runtime</text>
+<use href="#ollamaLogo" x="1090" y="1064" width="28" height="28" fill="#111827"/>
+<text x="1128" y="1083" class="small">Ollama local LLM</text>
+<g transform="translate(1366 1063)">
+  <circle cx="14" cy="14" r="9" fill="#f43f5e"/><circle cx="30" cy="14" r="9" fill="#facc15"/>
+  <circle cx="14" cy="30" r="9" fill="#22c55e"/><circle cx="30" cy="30" r="9" fill="#3b82f6"/>
+</g>
+<text x="1410" y="1083" class="small">ChromaDB vector store</text>
+
 </svg>
