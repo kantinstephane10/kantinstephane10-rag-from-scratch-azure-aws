@@ -10,6 +10,10 @@ It uses a private local MBA portfolio PDF as the knowledge source, but **the PDF
 feature/mba-rag-v4-ollama
 ```
 
+## Architecture Diagram
+
+![RAG V4 Architecture](docs/rag-v4-architecture.svg)
+
 ## Current Architecture
 
 ```text
