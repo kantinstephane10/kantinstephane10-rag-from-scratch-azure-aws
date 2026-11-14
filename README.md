@@ -20,6 +20,120 @@ The strict 12-question retrieval evaluation is saved in [`docs/results/v5-2-vali
 
 Validated result: **Hit@3 = 100%**, **Hit@8 = 100%**, **MRR = 0.875**.
 
+## Engineering Challenges, Decisions, and Why This Diagram
+
+### Challenge — V4 retrieval was strong but not perfect
+
+The strict evaluation tested 12 questions across all six MBA courses.
+
+V4/V5.1 achieved:
+
+```text
+Hit@1: 66.7%
+Hit@3: 91.7%
+Hit@8: 91.7%
+MRR:   0.792
+```
+
+Eleven questions passed, but this question failed:
+
+```text
+What technologies were proposed for the Agentic RAG architecture?
+```
+
+The correct answer existed in the PDF:
+
+```text
+Microsoft Foundry Agent Service
+Azure AI Search
+```
+
+However, the answer-bearing chunk never reached the reranker.
+
+### What the diagnostic showed
+
+Semantic search retrieved an introductory chunk on the same section/page, but the exact technology names were in the **adjacent chunk**.
+
+This distinction mattered:
+
+```text
+Semantic search found:
+chunk 271
+
+Answer was in:
+chunk 272
+```
+
+A reranker cannot promote evidence that it never receives.
+
+### Options considered
+
+We could have:
+
+- increased Top-K from 8 to a much larger number;
+- changed the embedding model;
+- changed chunk size and overlap;
+- removed the reranker;
+- added adjacent context around retrieved chunks.
+
+### Decision — add neighbor expansion
+
+We chose the smallest targeted change:
+
+```text
+semantic result
+      ↓
+previous chunk
+current chunk
+next chunk
+      ↓
+deduplicate
+      ↓
+CrossEncoder reranking
+```
+
+Neighbor expansion is restricted to the **same course** so retrieval does not accidentally cross course boundaries.
+
+### Why we chose this instead of increasing Top-K blindly
+
+The problem was not that the correct topic was far away semantically. The retriever had already found the correct section; the precise answer was simply split into the next chunk.
+
+Neighbor expansion therefore adds **local context around a strong semantic hit** instead of flooding the reranker with many unrelated candidates.
+
+### Result of the decision
+
+After adding neighbor expansion:
+
+```text
+Hit@1:  75.0%
+Hit@3: 100.0%
+Hit@5: 100.0%
+Hit@8: 100.0%
+MRR:    0.875
+```
+
+The previously failed architecture question became:
+
+```text
+Rank 1
+Source type: neighbor
+PDF page: 115
+Reranker score: 5.0393
+```
+
+### Why the V5.2 diagram is designed this way
+
+The diagram intentionally adds a highlighted **Neighbor Expansion** box between ChromaDB retrieval and CrossEncoder reranking.
+
+That location is important:
+
+- ChromaDB first finds semantically relevant anchor chunks;
+- neighbor expansion broadens the local evidence around those anchors;
+- the CrossEncoder then decides which expanded candidates best answer the question;
+- only the best three go to Ollama.
+
+The diagram also includes the measured Hit@3 and MRR values because V5.2 was not just an architectural idea—the change was introduced to solve a measured retrieval failure and was validated with a regression test.
+
 ## Current Architecture
 
 ```text
@@ -131,7 +245,7 @@ git clone https://github.com/kantinstephane10/kantinstephane10-rag-from-scratch-
 
 cd kantinstephane10-rag-from-scratch-azure-aws
 
-git switch feature/mba-rag-v4-ollama
+git switch feature/mba-rag-v5-2-neighbor-expansion
 
 uv sync
 ```
