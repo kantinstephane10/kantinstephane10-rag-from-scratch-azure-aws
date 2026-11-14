@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="2050" viewBox="0 0 1400 2050">
+  <defs>
+    <style>
+      .title { font: 700 42px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 21px Arial, sans-serif; fill: #475569; }
+      .section { font: 700 24px Arial, sans-serif; fill: #1e293b; }
+      .boxTitle { font: 700 22px Arial, sans-serif; fill: #0f172a; }
+      .boxText { font: 400 18px Arial, sans-serif; fill: #334155; }
+      .small { font: 400 16px Arial, sans-serif; fill: #475569; }
+      .metric { font: 700 20px Arial, sans-serif; fill: #065f46; }
+      .arrow { stroke: #475569; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="2050" fill="#f8fafc"/>
+
+  <text x="700" y="70" text-anchor="middle" class="title">RAG V6 — End-to-End Evaluation</text>
+  <text x="700" y="108" text-anchor="middle" class="subtitle">Validated retrieval + Ollama generation + citation verification + refusal testing</text>
+
+  <text x="700" y="165" text-anchor="middle" class="section">Production RAG Pipeline</text>
+
+  <rect x="260" y="200" width="880" height="90" rx="18" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <text x="700" y="238" text-anchor="middle" class="boxTitle">Private Local MBA PDF</text>
+  <text x="700" y="267" text-anchor="middle" class="boxText">Private source stays local and is excluded from Git</text>
+
+  <line x1="700" y1="290" x2="700" y2="325" class="arrow"/>
+
+  <rect x="260" y="325" width="880" height="100" rx="18" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+  <text x="700" y="365" text-anchor="middle" class="boxTitle">Load → Clean → Metadata → Recursive Chunking</text>
+  <text x="700" y="395" text-anchor="middle" class="boxText">800 characters • 120 overlap • course/chapter/page metadata</text>
+
+  <line x1="700" y1="425" x2="700" y2="460" class="arrow"/>
+
+  <rect x="260" y="460" width="880" height="95" rx="18" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+  <text x="700" y="498" text-anchor="middle" class="boxTitle">Noise Filtering</text>
+  <text x="700" y="528" text-anchor="middle" class="boxText">351 final indexed chunks</text>
+
+  <line x1="700" y1="555" x2="700" y2="590" class="arrow"/>
+
+  <rect x="260" y="590" width="880" height="100" rx="18" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+  <text x="700" y="630" text-anchor="middle" class="boxTitle">MiniLM Embeddings → ChromaDB</text>
+  <text x="700" y="660" text-anchor="middle" class="boxText">all-MiniLM-L6-v2 • 384 dimensions</text>
+
+  <line x1="700" y1="690" x2="700" y2="725" class="arrow"/>
+
+  <rect x="260" y="725" width="880" height="95" rx="18" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="700" y="763" text-anchor="middle" class="boxTitle">Top-8 Semantic Retrieval</text>
+  <text x="700" y="793" text-anchor="middle" class="boxText">High-recall candidate search</text>
+
+  <line x1="700" y1="820" x2="700" y2="855" class="arrow"/>
+
+  <rect x="260" y="855" width="880" height="100" rx="18" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/>
+  <text x="700" y="895" text-anchor="middle" class="boxTitle">Neighbor Expansion</text>
+  <text x="700" y="925" text-anchor="middle" class="boxText">Previous + current + next chunk, same-course only</text>
+
+  <line x1="700" y1="955" x2="700" y2="990" class="arrow"/>
+
+  <rect x="260" y="990" width="880" height="100" rx="18" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+  <text x="700" y="1030" text-anchor="middle" class="boxTitle">CrossEncoder Reranking → Best 3</text>
+  <text x="700" y="1060" text-anchor="middle" class="boxText">ms-marco-MiniLM-L6-v2</text>
+
+  <line x1="700" y1="1090" x2="700" y2="1125" class="arrow"/>
+
+  <rect x="260" y="1125" width="880" height="100" rx="18" fill="#fae8ff" stroke="#a21caf" stroke-width="2"/>
+  <text x="700" y="1165" text-anchor="middle" class="boxTitle">Ollama qwen3:4b-instruct</text>
+  <text x="700" y="1195" text-anchor="middle" class="boxText">Grounded prompt • retrieved context only • temperature 0</text>
+
+  <line x1="700" y1="1225" x2="700" y2="1260" class="arrow"/>
+
+  <rect x="260" y="1260" width="880" height="95" rx="18" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+  <text x="700" y="1298" text-anchor="middle" class="boxTitle">Answer + Verified Course/Page Citation</text>
+  <text x="700" y="1328" text-anchor="middle" class="boxText">Citation must match one of the retrieved source chunks</text>
+
+  <text x="700" y="1435" text-anchor="middle" class="section">V6 Evaluation Harness</text>
+
+  <rect x="170" y="1470" width="1060" height="105" rx="18" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
+  <text x="700" y="1510" text-anchor="middle" class="boxTitle">9 End-to-End Tests</text>
+  <text x="700" y="1541" text-anchor="middle" class="boxText">8 answerable document questions + 1 out-of-scope refusal question</text>
+
+  <line x1="700" y1="1575" x2="700" y2="1610" class="arrow"/>
+
+  <rect x="170" y="1610" width="1060" height="130" rx="18" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+  <text x="700" y="1650" text-anchor="middle" class="boxTitle">Automated Checks</text>
+  <text x="700" y="1682" text-anchor="middle" class="boxText">Answer evidence • expected course • citation validity • grounded refusal</text>
+  <text x="700" y="1713" text-anchor="middle" class="small">A citation only passes when its course/page pair was actually supplied to Ollama</text>
+
+  <line x1="700" y1="1740" x2="700" y2="1775" class="arrow"/>
+
+  <rect x="170" y="1775" width="1060" height="180" rx="22" fill="#ecfdf5" stroke="#10b981" stroke-width="3"/>
+  <text x="700" y="1820" text-anchor="middle" class="metric">Observed V6 Result: 9 / 9 tests passed — 100%</text>
+  <text x="700" y="1860" text-anchor="middle" class="boxText">Answer correctness: 8/8 (100%)</text>
+  <text x="700" y="1890" text-anchor="middle" class="boxText">Correct source retrieval: 8/8 (100%)</text>
+  <text x="700" y="1920" text-anchor="middle" class="boxText">Valid citations: 8/8 (100%) • Grounded refusal: 1/1 (100%)</text>
+
+  <text x="700" y="2010" text-anchor="middle" class="small">Proof file: docs/results/v6-validation.md</text>
+</svg>
