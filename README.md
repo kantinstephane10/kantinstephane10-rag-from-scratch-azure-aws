@@ -14,6 +14,12 @@ feature/mba-rag-v5-2-neighbor-expansion
 
 ![RAG V5.2 Architecture](docs/rag-v5-2-architecture.svg)
 
+## Validation Proof
+
+The strict 12-question retrieval evaluation is saved in [`docs/results/v5-2-validation.md`](docs/results/v5-2-validation.md).
+
+Validated result: **Hit@3 = 100%**, **Hit@8 = 100%**, **MRR = 0.875**.
+
 ## Current Architecture
 
 ```text
