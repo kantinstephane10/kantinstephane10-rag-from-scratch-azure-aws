@@ -7,12 +7,12 @@ It uses a private local MBA portfolio PDF as the knowledge source, but **the PDF
 ## Branch
 
 ```text
-feature/mba-rag-v6-end-to-end-evaluation
+feature/mba-rag-v7-streamlit-ui
 ```
 
 ## Architecture Diagram
 
-![RAG V6 Architecture](docs/rag-v6-architecture.svg)
+![RAG V7 Streamlit Architecture](docs/rag-v7-streamlit-architecture.svg)
 
 ## Validation Proof
 
@@ -122,6 +122,142 @@ independent evaluation
 The diagram shows four checks after generation—answer correctness, source correctness, citation validation, and refusal behavior—because V6's purpose is to prove that the whole system behaves correctly, not merely that retrieval works.
 
 The 100% result appears at the bottom as measured evidence, not as an assumed claim.
+
+## V7 — Streamlit Interface
+
+V7 adds a browser-based interface without changing the validated RAG backend.
+
+### New file
+
+```text
+src/streamlit_app.py
+```
+
+### Run the UI
+
+```powershell
+git switch feature/mba-rag-v7-streamlit-ui
+uv sync
+uv run streamlit run src/streamlit_app.py
+```
+
+Streamlit should open the application in your browser.
+
+### UI Features
+
+- chat-style question input;
+- example questions;
+- persistent chat history during the session;
+- clear-chat button;
+- visible RAG configuration;
+- grounded Ollama answers;
+- expandable retrieved-source evidence;
+- course, chapter, PDF page, retrieval type, and reranker score;
+- private PDF remains local.
+
+## Engineering Challenges, Decisions, and Why the V7 Diagram
+
+### Challenge 1 — Streamlit reruns Python after every interaction
+
+A normal Streamlit application reruns the script when the user interacts with a widget. If we initialized the embedding model, reranker, Ollama connection, PDF chunks, and ChromaDB on every rerun, the UI would repeatedly perform expensive startup work.
+
+**Decision:** wrap RAG initialization in:
+
+```python
+@st.cache_resource
+```
+
+**Why:** the heavy RAG resources are initialized once and reused during normal UI reruns.
+
+### Challenge 2 — Avoid mixing UI code with the validated RAG logic
+
+V6 already proved that retrieval, answer generation, citations, and grounded refusal work correctly.
+
+**Decision:** keep `src/rag_pipeline.py` as the RAG backend and create a separate:
+
+```text
+src/streamlit_app.py
+```
+
+The UI imports and calls the existing `ask_rag()` function.
+
+**Why:** this preserves separation of concerns:
+
+```text
+RAG backend = retrieval + generation
+
+Streamlit UI = user interaction + display
+```
+
+A UI bug should not require rewriting the retrieval pipeline.
+
+### Challenge 3 — A friendly UI must not hide the evidence
+
+A simple chatbot can display only the generated answer, but that would hide the retrieval behavior we spent several versions validating.
+
+**Decision:** every assistant response includes an expandable:
+
+```text
+View retrieved sources
+```
+
+panel.
+
+The panel displays:
+
+- course;
+- chapter;
+- PDF page;
+- semantic or neighbor retrieval source;
+- CrossEncoder score;
+- retrieved source text.
+
+**Why:** the interface remains easy to use while preserving explainability and making retrieval failures visible.
+
+### Challenge 4 — Preserve local privacy
+
+The source MBA portfolio is private and should not be uploaded to GitHub or a hosted service just to build the interface.
+
+**Decision:** Streamlit runs locally and continues using the local PDF, local ChromaDB, local embedding/reranking models, and local Ollama model.
+
+### Why the V7 diagram is designed this way
+
+The diagram adds **Streamlit as a layer above the validated RAG pipeline**, rather than inserting Streamlit inside retrieval.
+
+That distinction is intentional:
+
+```text
+User
+ ↓
+Streamlit UI
+ ↓
+Validated RAG backend
+ ↓
+Answer + evidence
+ ↓
+Streamlit display
+```
+
+The `st.cache_resource` box appears between the UI and backend because resource caching is the main new runtime concern introduced by Streamlit.
+
+The lower part of the diagram still shows the complete V5.2/V6 retrieval pipeline. This makes it clear that V7 changes **how the user interacts with RAG**, not how the evidence is retrieved or generated.
+
+## V7 Validation Status
+
+The backend is already validated by V6:
+
+```text
+9/9 end-to-end tests passed
+Overall accuracy: 100%
+```
+
+The Streamlit UI itself still requires a local runtime validation because it depends on your private PDF and local Ollama installation.
+
+The exact test plan is saved here:
+
+[`docs/results/v7-validation-plan.md`](docs/results/v7-validation-plan.md)
+
+After the local UI run succeeds, this branch will receive a final V7 validation proof with the observed results.
 
 ## Current Architecture
 
@@ -234,7 +370,7 @@ git clone https://github.com/kantinstephane10/kantinstephane10-rag-from-scratch-
 
 cd kantinstephane10-rag-from-scratch-azure-aws
 
-git switch feature/mba-rag-v6-end-to-end-evaluation
+git switch feature/mba-rag-v7-streamlit-ui
 
 uv sync
 ```
@@ -315,4 +451,4 @@ A retrieval failure involving the Agentic RAG architecture was diagnosed and fix
 
 ## Next Step
 
-V6 end-to-end evaluation is complete. The next milestone is a **Streamlit interface** built on top of the validated V5.2/V6 RAG pipeline.
+Run and validate the V7 Streamlit interface locally. After the UI passes the documented tests, save the observed result as the V7 proof before moving to conversational memory or agent capabilities.
