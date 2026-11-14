@@ -1,10 +1,6 @@
 import streamlit as st
 
-from sentence_transformers import SentenceTransformer, CrossEncoder
-from langchain_ollama import ChatOllama
-
 from rag_pipeline import (
-    PDF_FILE,
     EMBEDDING_MODEL,
     RERANKER_MODEL,
     OLLAMA_MODEL,
@@ -15,111 +11,101 @@ from rag_pipeline import (
     NEIGHBOR_RANGE,
     BROAD_PER_COURSE_K,
     BROAD_FINAL_PER_COURSE,
-    load_and_chunk_pdf,
-    build_vector_database,
-    detect_query_type,
+    MEMORY_MAX_MESSAGES,
+    initialize_rag,
     ask_rag,
 )
 
 
 # ============================================================
-# RAG V8 - STREAMLIT UI
+# RAG V9 - STREAMLIT CONVERSATIONAL MEMORY
+#
+# Streamlit chat
+#   -> session conversation history
+#   -> follow-up question rewriting
+#   -> query router
+#   -> focused or broad retrieval
+#   -> broad-query course relevance gate
+#   -> CrossEncoder reranking
+#   -> Ollama
+#   -> deterministic Python citations
+#   -> final answer
 # ============================================================
 
 
+# ============================================================
+# PAGE SETTINGS
+# ============================================================
+
 st.set_page_config(
-    page_title="MBA RAG Assistant V8",
+    page_title="MBA RAG Assistant V9",
     page_icon="📚",
     layout="wide",
 )
 
 
 st.title(
-    "📚 MBA RAG Assistant — V8"
+    "📚 MBA RAG Assistant V9"
 )
 
 st.caption(
-    "Query-aware local RAG with MiniLM, ChromaDB, "
-    "neighbor expansion, CrossEncoder reranking, "
-    "Ollama, and deterministic citations."
+    "Conversational Memory + Query-Aware Retrieval + "
+    "Course Relevance Filtering + Neighbor Expansion + "
+    "CrossEncoder Reranking + Deterministic Citations"
 )
 
+
+# ============================================================
+# LOAD RAG ONCE
+# ============================================================
 
 @st.cache_resource(
     show_spinner=False
 )
-def initialize_rag():
+def load_rag():
+    return initialize_rag()
 
-    if not PDF_FILE.exists():
 
-        raise FileNotFoundError(
-            "\nMBA PDF not found.\n"
-            f"Expected path:\n{PDF_FILE}\n"
-        )
+try:
+    with st.spinner(
+        "Loading RAG V9..."
+    ):
+        rag = load_rag()
 
-    embedding_model = SentenceTransformer(
-        EMBEDDING_MODEL
+except Exception as error:
+    st.error(
+        "RAG V9 could not start."
     )
-
-    reranker = CrossEncoder(
-        RERANKER_MODEL
-    )
-
-    llm = ChatOllama(
-        model=OLLAMA_MODEL,
-        temperature=0,
-    )
-
-    rag_chunks = load_and_chunk_pdf()
-
-    rag_chunk_lookup = {
-        chunk.metadata[
-            "rag_chunk_number"
-        ]:
-            chunk
-
-        for chunk in rag_chunks
-    }
-
-    collection = build_vector_database(
-        rag_chunks,
-        embedding_model,
-    )
-
-    return {
-        "embedding_model":
-            embedding_model,
-
-        "reranker":
-            reranker,
-
-        "llm":
-            llm,
-
-        "rag_chunks":
-            rag_chunks,
-
-        "rag_chunk_lookup":
-            rag_chunk_lookup,
-
-        "collection":
-            collection,
-    }
+    st.exception(error)
+    st.stop()
 
 
-def show_sources(
-    sources,
+# ============================================================
+# SESSION MEMORY
+# ============================================================
+
+if (
+    "messages"
+    not in st.session_state
 ):
+    st.session_state.messages = []
+
+
+# ============================================================
+# SOURCE DISPLAY
+# ============================================================
+
+def show_sources(sources):
+    if not sources:
+        return
 
     with st.expander(
         "View retrieved sources"
     ):
-
         for i, source in enumerate(
             sources,
             start=1,
         ):
-
             metadata = source[
                 "metadata"
             ]
@@ -129,53 +115,57 @@ def show_sources(
             )
 
             st.write(
-                f"**Course:** "
-                f"{metadata['course']}"
+                "**Course:**",
+                metadata["course"],
             )
 
             st.write(
-                f"**Course title:** "
-                f"{metadata['chapter']}"
+                "**Course title:**",
+                metadata["chapter"],
             )
 
             st.write(
-                f"**PDF page:** "
-                f"{metadata['pdf_page']}"
+                "**PDF page:**",
+                metadata["pdf_page"],
             )
 
             st.write(
-                f"**Retrieval source:** "
-                f"{source['retrieval_source']}"
+                "**Retrieval source:**",
+                source[
+                    "retrieval_source"
+                ],
             )
 
             st.write(
-                f"**Reranker score:** "
-                f"{source['reranker_score']:.4f}"
+                "**Reranker score:**",
+                round(
+                    source[
+                        "reranker_score"
+                    ],
+                    4,
+                ),
             )
 
             st.text(
-                source[
-                    "document"
-                ]
+                source["document"]
             )
 
-            if i < len(
-                sources
-            ):
-
+            if i < len(sources):
                 st.divider()
 
 
-with st.sidebar:
+# ============================================================
+# SIDEBAR
+# ============================================================
 
+with st.sidebar:
     st.header(
-        "RAG Configuration"
+        "RAG V9 Configuration"
     )
 
     st.write(
         "**Embedding model**"
     )
-
     st.code(
         EMBEDDING_MODEL
     )
@@ -183,7 +173,6 @@ with st.sidebar:
     st.write(
         "**Reranker**"
     )
-
     st.code(
         RERANKER_MODEL
     )
@@ -191,7 +180,6 @@ with st.sidebar:
     st.write(
         "**Generation model**"
     )
-
     st.code(
         OLLAMA_MODEL
     )
@@ -209,7 +197,7 @@ with st.sidebar:
     )
 
     st.write(
-        f"**Focused semantic candidates:** "
+        f"**Focused candidates:** "
         f"{RETRIEVE_K}"
     )
 
@@ -219,7 +207,7 @@ with st.sidebar:
     )
 
     st.write(
-        f"**Focused final context:** "
+        f"**Focused final chunks:** "
         f"{FINAL_K}"
     )
 
@@ -230,71 +218,79 @@ with st.sidebar:
     )
 
     st.write(
-        f"{BROAD_PER_COURSE_K} semantic candidates "
-        "per course"
+        f"{BROAD_PER_COURSE_K} "
+        "candidates/course"
     )
 
     st.write(
-        f"{BROAD_FINAL_PER_COURSE} final chunks "
-        "per course"
+        f"{BROAD_FINAL_PER_COURSE} "
+        "final chunks/course"
+    )
+
+    st.write(
+        "Course relevance gate: enabled"
     )
 
     st.divider()
 
+    st.write(
+        "**Conversation memory**"
+    )
+
+    st.write(
+        f"Recent messages used: "
+        f"{MEMORY_MAX_MESSAGES}"
+    )
+
+    st.write(
+        f"Current chat messages: "
+        f"{len(st.session_state.messages)}"
+    )
+
     st.info(
-        "V8 automatically routes focused questions "
-        "and broad portfolio questions through "
-        "different retrieval strategies."
+        "V9 remembers recent conversation turns "
+        "during the current Streamlit session."
     )
 
     if st.button(
-        "Clear chat"
+        "Clear conversation"
     ):
-
         st.session_state.messages = []
-
         st.rerun()
 
 
-try:
-
-    with st.spinner(
-        "Loading local RAG system..."
-    ):
-
-        rag = initialize_rag()
-
-except Exception as error:
-
-    st.error(
-        "The RAG system could not start."
-    )
-
-    st.exception(
-        error
-    )
-
-    st.stop()
-
+# ============================================================
+# READY STATUS
+# ============================================================
 
 st.success(
-    f"RAG V8 ready — "
+    f"RAG V9 ready — "
     f"{len(rag['rag_chunks'])} indexed chunks."
 )
 
 
+# ============================================================
+# EXAMPLE QUESTIONS
+# ============================================================
+
 st.subheader(
-    "Example questions"
+    "Example Questions"
 )
 
 example_questions = [
     "What are my five CliftonStrengths?",
-    "What technologies were proposed for the Agentic RAG architecture?",
+    "Which one was ranked highest?",
     (
-        "Identify all courses in my MBA portfolio that discuss "
-        "project management. For each course, provide the course code, "
-        "course title, how project management is discussed, "
-        "and the PDF page number."
+        "What technologies were proposed "
+        "for the Agentic RAG architecture?"
+    ),
+    (
+        "Which one provides the search "
+        "and retrieval layer?"
+    ),
+    (
+        "Identify all courses in my MBA portfolio "
+        "that discuss project management."
     ),
     "What is Microsoft's current stock price?",
 ]
@@ -302,64 +298,68 @@ example_questions = [
 example_question = None
 
 for example in example_questions:
-
     if st.button(
         example,
         use_container_width=True,
     ):
-
         example_question = example
 
 
-if (
-    "messages"
-    not in st.session_state
-):
-
-    st.session_state.messages = []
-
+# ============================================================
+# DISPLAY CHAT HISTORY
+# ============================================================
 
 for message in st.session_state.messages:
-
     with st.chat_message(
-        message[
-            "role"
-        ]
+        message["role"]
     ):
-
         st.markdown(
-            message[
-                "content"
-            ]
+            message["content"]
         )
 
         if (
-            message[
-                "role"
-            ] == "assistant"
+            message["role"]
+            == "assistant"
         ):
-
             query_type = message.get(
                 "query_type"
             )
 
-            if query_type:
+            standalone_question = message.get(
+                "standalone_question"
+            )
 
+            if query_type:
                 st.caption(
                     f"Retrieval mode: "
                     f"{query_type}"
                 )
 
-            if message.get(
-                "sources"
-            ):
+            if standalone_question:
+                with st.expander(
+                    "Conversation memory / "
+                    "interpreted question"
+                ):
+                    st.write(
+                        "**Standalone retrieval question:**"
+                    )
+                    st.write(
+                        standalone_question
+                    )
 
+            sources = message.get(
+                "sources"
+            )
+
+            if sources:
                 show_sources(
-                    message[
-                        "sources"
-                    ]
+                    sources
                 )
 
+
+# ============================================================
+# USER INPUT
+# ============================================================
 
 question = st.chat_input(
     "Ask a question about the MBA portfolio..."
@@ -367,33 +367,25 @@ question = st.chat_input(
 
 if (
     question is None
-    and
-    example_question is not None
+    and example_question is not None
 ):
-
     question = example_question
 
 
+# ============================================================
+# PROCESS QUESTION
+# ============================================================
+
 if question:
-
-    query_type = detect_query_type(
-        question
-    )
-
-    st.session_state.messages.append(
-        {
-            "role":
-                "user",
-
-            "content":
-                question,
-        }
+    # Existing conversation only.
+    # The current question is added after the answer.
+    conversation_history = list(
+        st.session_state.messages
     )
 
     with st.chat_message(
         "user"
     ):
-
         st.markdown(
             question
         )
@@ -401,55 +393,71 @@ if question:
     with st.chat_message(
         "assistant"
     ):
+        with st.spinner(
+            "Using conversation memory and searching "
+            "the MBA portfolio..."
+        ):
+            (
+                answer,
+                sources,
+                query_type,
+                standalone_question,
+            ) = ask_rag(
+                question,
+                conversation_history,
+                rag["collection"],
+                rag["embedding_model"],
+                rag["reranker"],
+                rag["rag_chunk_lookup"],
+                rag["llm"],
+            )
 
         st.caption(
             f"Retrieval mode: "
             f"{query_type}"
         )
 
-        with st.spinner(
-            "Searching the portfolio and generating an answer..."
-        ):
-
-            answer, sources = ask_rag(
-                question,
-                rag[
-                    "collection"
-                ],
-                rag[
-                    "embedding_model"
-                ],
-                rag[
-                    "reranker"
-                ],
-                rag[
-                    "rag_chunk_lookup"
-                ],
-                rag[
-                    "llm"
-                ],
-            )
-
         st.markdown(
             answer
         )
+
+        with st.expander(
+            "Conversation memory / interpreted question"
+        ):
+            st.write(
+                "**Original question:**"
+            )
+            st.write(
+                question
+            )
+
+            st.write(
+                "**Standalone retrieval question:**"
+            )
+            st.write(
+                standalone_question
+            )
 
         show_sources(
             sources
         )
 
+    # Save after generation so the current turn becomes
+    # memory for the NEXT question.
     st.session_state.messages.append(
         {
-            "role":
-                "assistant",
+            "role": "user",
+            "content": question,
+        }
+    )
 
-            "content":
-                answer,
-
-            "query_type":
-                query_type,
-
-            "sources":
-                sources,
+    st.session_state.messages.append(
+        {
+            "role": "assistant",
+            "content": answer,
+            "query_type": query_type,
+            "standalone_question":
+                standalone_question,
+            "sources": sources,
         }
     )
