@@ -7,8 +7,12 @@ It uses a private local MBA portfolio PDF as the knowledge source, but **the PDF
 ## Branch
 
 ```text
-feature/mba-rag-v4-ollama
+feature/mba-rag-v5-2-neighbor-expansion
 ```
+
+## Architecture Diagram
+
+![RAG V5.2 Architecture](docs/rag-v5-2-architecture.svg)
 
 ## Current Architecture
 
