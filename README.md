@@ -34,6 +34,95 @@ Run the evaluation locally with:
 uv run python src/rag_v6_evaluation.py
 ```
 
+## Engineering Challenges, Decisions, and Why This Diagram
+
+### Challenge — perfect retrieval does not prove the RAG system is correct
+
+V5.2 reached **100% Hit@3** on the 12-question retrieval test. That proved the right evidence was available to the generation step, but it did **not** prove that Ollama would:
+
+- use the evidence correctly;
+- include the required facts;
+- cite a source it actually received;
+- refuse a question that the document cannot answer.
+
+A RAG system can have excellent retrieval and still hallucinate during generation.
+
+### Decision — evaluate the complete pipeline separately
+
+Instead of changing the production RAG code again, V6 adds a separate evaluation harness:
+
+```text
+src/rag_v6_evaluation.py
+```
+
+**Why:** production code and test code have different responsibilities. Keeping evaluation separate makes the working RAG pipeline easier to understand and allows repeatable regression testing.
+
+### What V6 validates
+
+For answerable questions, the evaluation checks:
+
+1. **Answer evidence** — required facts must appear in the generated answer.
+2. **Correct source retrieval** — the expected course must be in the retrieved Top 3.
+3. **Citation validity** — a cited course/page must exactly match a source that Ollama actually received.
+
+For an unanswerable question, the evaluation checks:
+
+4. **Grounded refusal** — Ollama must refuse instead of answering from outside model knowledge.
+
+### Why we included an out-of-scope question
+
+The test:
+
+```text
+What is Microsoft's current stock price?
+```
+
+is intentionally unrelated to information available in the MBA portfolio.
+
+Qwen may have outside knowledge, but a grounded RAG assistant should answer only from retrieved document evidence.
+
+The required behavior is:
+
+```text
+I don't have enough information in the provided document to answer that.
+```
+
+### Result of the decision
+
+The observed V6 evaluation produced:
+
+```text
+Total tests: 9
+Total passed: 9
+
+Answer correctness:        8/8 (100%)
+Correct source retrieval:  8/8 (100%)
+Valid citation accuracy:   8/8 (100%)
+Grounded refusal accuracy: 1/1 (100%)
+
+Overall: 9/9 (100%)
+```
+
+### Why the V6 diagram is designed this way
+
+The top part of the V6 diagram preserves the validated V5.2 production pipeline because V6 did not replace the retriever.
+
+The new lower section represents the **evaluation harness**.
+
+This visual separation communicates an important engineering principle:
+
+```text
+Production RAG
+      ↓
+observable answer + sources
+      ↓
+independent evaluation
+```
+
+The diagram shows four checks after generation—answer correctness, source correctness, citation validation, and refusal behavior—because V6's purpose is to prove that the whole system behaves correctly, not merely that retrieval works.
+
+The 100% result appears at the bottom as measured evidence, not as an assumed claim.
+
 ## Current Architecture
 
 ```text
@@ -145,7 +234,7 @@ git clone https://github.com/kantinstephane10/kantinstephane10-rag-from-scratch-
 
 cd kantinstephane10-rag-from-scratch-azure-aws
 
-git switch feature/mba-rag-v4-ollama
+git switch feature/mba-rag-v6-end-to-end-evaluation
 
 uv sync
 ```
