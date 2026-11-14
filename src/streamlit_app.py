@@ -13,131 +13,80 @@ from rag_pipeline import (
     RETRIEVE_K,
     FINAL_K,
     NEIGHBOR_RANGE,
+    BROAD_PER_COURSE_K,
+    BROAD_FINAL_PER_COURSE,
     load_and_chunk_pdf,
     build_vector_database,
+    detect_query_type,
     ask_rag,
 )
 
 
 # ============================================================
-# RAG V7 - STREAMLIT UI
-#
-# Browser UI
-#   -> User question
-#   -> Validated V5.2/V6 RAG backend
-#   -> Grounded answer
-#   -> Retrieved source details
-#
-# The PDF, embeddings, ChromaDB, reranker, and Ollama
-# all remain local.
+# RAG V8 - STREAMLIT UI
 # ============================================================
 
-
-# ============================================================
-# 1. PAGE SETTINGS
-# ============================================================
 
 st.set_page_config(
-    page_title="MBA RAG Assistant",
+    page_title="MBA RAG Assistant V8",
     page_icon="📚",
     layout="wide",
 )
 
 
-# ============================================================
-# 2. TITLE
-# ============================================================
-
-st.title("📚 MBA RAG Assistant")
+st.title(
+    "📚 MBA RAG Assistant — V8"
+)
 
 st.caption(
-    "Local Retrieval-Augmented Generation with MiniLM, ChromaDB, "
-    "CrossEncoder reranking, neighbor expansion, and Ollama."
+    "Query-aware local RAG with MiniLM, ChromaDB, "
+    "neighbor expansion, CrossEncoder reranking, "
+    "Ollama, and deterministic citations."
 )
 
 
-# ============================================================
-# 3. INITIALIZE RAG ONCE
-#
-# Streamlit reruns the script after user interactions.
-# @st.cache_resource prevents reloading models and rebuilding
-# the vector database on every rerun.
-# ============================================================
-
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(
+    show_spinner=False
+)
 def initialize_rag():
 
     if not PDF_FILE.exists():
 
         raise FileNotFoundError(
-            "\nPrivate PDF not found.\n"
-            f"Place it locally at:\n{PDF_FILE}\n"
+            "\nMBA PDF not found.\n"
+            f"Expected path:\n{PDF_FILE}\n"
         )
-
-
-    # --------------------------------------------------------
-    # Embedding model
-    # --------------------------------------------------------
 
     embedding_model = SentenceTransformer(
         EMBEDDING_MODEL
     )
 
-
-    # --------------------------------------------------------
-    # CrossEncoder reranker
-    # --------------------------------------------------------
-
     reranker = CrossEncoder(
         RERANKER_MODEL
     )
-
-
-    # --------------------------------------------------------
-    # Local Ollama LLM
-    # --------------------------------------------------------
 
     llm = ChatOllama(
         model=OLLAMA_MODEL,
         temperature=0,
     )
 
-
-    # --------------------------------------------------------
-    # Load + chunk PDF
-    # --------------------------------------------------------
-
     rag_chunks = load_and_chunk_pdf()
 
-
-    # --------------------------------------------------------
-    # Build neighbor lookup
-    # --------------------------------------------------------
-
     rag_chunk_lookup = {
-
         chunk.metadata[
             "rag_chunk_number"
         ]:
             chunk
 
         for chunk in rag_chunks
-
     }
-
-
-    # --------------------------------------------------------
-    # Build local ChromaDB collection
-    # --------------------------------------------------------
 
     collection = build_vector_database(
         rag_chunks,
         embedding_model,
     )
 
-
     return {
-
         "embedding_model":
             embedding_model,
 
@@ -155,74 +104,60 @@ def initialize_rag():
 
         "collection":
             collection,
-
     }
 
 
-# ============================================================
-# 4. SOURCE DISPLAY FUNCTION
-# ============================================================
-
-def show_sources(sources):
-
+def show_sources(
+    sources,
+):
 
     with st.expander(
         "View retrieved sources"
     ):
-
 
         for i, source in enumerate(
             sources,
             start=1,
         ):
 
-
             metadata = source[
                 "metadata"
             ]
 
-
             st.markdown(
                 f"### Source {i}"
             )
-
 
             st.write(
                 f"**Course:** "
                 f"{metadata['course']}"
             )
 
-
             st.write(
-                f"**Chapter:** "
+                f"**Course title:** "
                 f"{metadata['chapter']}"
             )
-
 
             st.write(
                 f"**PDF page:** "
                 f"{metadata['pdf_page']}"
             )
 
-
             st.write(
                 f"**Retrieval source:** "
                 f"{source['retrieval_source']}"
             )
-
 
             st.write(
                 f"**Reranker score:** "
                 f"{source['reranker_score']:.4f}"
             )
 
-
             st.text(
                 source[
                     "document"
                 ]
             )
-
 
             if i < len(
                 sources
@@ -231,17 +166,11 @@ def show_sources(sources):
                 st.divider()
 
 
-# ============================================================
-# 5. SIDEBAR
-# ============================================================
-
 with st.sidebar:
-
 
     st.header(
         "RAG Configuration"
     )
-
 
     st.write(
         "**Embedding model**"
@@ -251,7 +180,6 @@ with st.sidebar:
         EMBEDDING_MODEL
     )
 
-
     st.write(
         "**Reranker**"
     )
@@ -259,7 +187,6 @@ with st.sidebar:
     st.code(
         RERANKER_MODEL
     )
-
 
     st.write(
         "**Generation model**"
@@ -269,43 +196,56 @@ with st.sidebar:
         OLLAMA_MODEL
     )
 
+    st.divider()
+
+    st.write(
+        f"**Chunk size:** "
+        f"{CHUNK_SIZE}"
+    )
+
+    st.write(
+        f"**Chunk overlap:** "
+        f"{CHUNK_OVERLAP}"
+    )
+
+    st.write(
+        f"**Focused semantic candidates:** "
+        f"{RETRIEVE_K}"
+    )
+
+    st.write(
+        f"**Neighbor range:** "
+        f"±{NEIGHBOR_RANGE}"
+    )
+
+    st.write(
+        f"**Focused final context:** "
+        f"{FINAL_K}"
+    )
 
     st.divider()
 
-
     st.write(
-        f"**Chunk size:** {CHUNK_SIZE}"
+        "**Broad retrieval**"
     )
 
-
     st.write(
-        f"**Chunk overlap:** {CHUNK_OVERLAP}"
+        f"{BROAD_PER_COURSE_K} semantic candidates "
+        "per course"
     )
 
-
     st.write(
-        f"**Semantic candidates:** {RETRIEVE_K}"
+        f"{BROAD_FINAL_PER_COURSE} final chunks "
+        "per course"
     )
-
-
-    st.write(
-        f"**Neighbor range:** ±{NEIGHBOR_RANGE}"
-    )
-
-
-    st.write(
-        f"**Final context chunks:** {FINAL_K}"
-    )
-
 
     st.divider()
-
 
     st.info(
-        "The private PDF stays on your computer. "
-        "It is not committed to GitHub."
+        "V8 automatically routes focused questions "
+        "and broad portfolio questions through "
+        "different retrieval strategies."
     )
-
 
     if st.button(
         "Clear chat"
@@ -316,99 +256,70 @@ with st.sidebar:
         st.rerun()
 
 
-# ============================================================
-# 6. LOAD LOCAL RAG
-# ============================================================
-
 try:
-
 
     with st.spinner(
         "Loading local RAG system..."
     ):
 
-
         rag = initialize_rag()
 
-
 except Exception as error:
-
 
     st.error(
         "The RAG system could not start."
     )
 
-
     st.exception(
         error
     )
 
-
     st.stop()
 
 
-# ============================================================
-# 7. READY STATUS
-# ============================================================
-
 st.success(
-    f"RAG ready — "
+    f"RAG V8 ready — "
     f"{len(rag['rag_chunks'])} indexed chunks."
 )
 
-
-# ============================================================
-# 8. EXAMPLE QUESTIONS
-# ============================================================
 
 st.subheader(
     "Example questions"
 )
 
-
 example_questions = [
-
     "What are my five CliftonStrengths?",
-
-    "What two ethical traits did I identify in Satya Nadella?",
-
     "What technologies were proposed for the Agentic RAG architecture?",
-
-    "What relationship was examined in the linear regression analysis?",
-
+    (
+        "Identify all courses in my MBA portfolio that discuss "
+        "project management. For each course, provide the course code, "
+        "course title, how project management is discussed, "
+        "and the PDF page number."
+    ),
+    "What is Microsoft's current stock price?",
 ]
-
 
 example_question = None
 
-
 for example in example_questions:
-
 
     if st.button(
         example,
         use_container_width=True,
     ):
 
-
         example_question = example
 
-
-# ============================================================
-# 9. CHAT HISTORY
-# ============================================================
 
 if (
     "messages"
     not in st.session_state
 ):
 
-
     st.session_state.messages = []
 
 
 for message in st.session_state.messages:
-
 
     with st.chat_message(
         message[
@@ -416,45 +327,43 @@ for message in st.session_state.messages:
         ]
     ):
 
-
         st.markdown(
             message[
                 "content"
             ]
         )
 
-
         if (
             message[
                 "role"
-            ]
-            == "assistant"
-            and
-            message.get(
-                "sources"
-            )
+            ] == "assistant"
         ):
 
-
-            show_sources(
-                message[
-                    "sources"
-                ]
+            query_type = message.get(
+                "query_type"
             )
 
+            if query_type:
 
-# ============================================================
-# 10. USER QUESTION
-# ============================================================
+                st.caption(
+                    f"Retrieval mode: "
+                    f"{query_type}"
+                )
+
+            if message.get(
+                "sources"
+            ):
+
+                show_sources(
+                    message[
+                        "sources"
+                    ]
+                )
+
 
 question = st.chat_input(
     "Ask a question about the MBA portfolio..."
 )
-
-
-# ------------------------------------------------------------
-# An example button submits exactly one question.
-# ------------------------------------------------------------
 
 if (
     question is None
@@ -462,114 +371,85 @@ if (
     example_question is not None
 ):
 
-
     question = example_question
 
 
-# ============================================================
-# 11. RUN RAG
-# ============================================================
-
 if question:
 
-
-    # --------------------------------------------------------
-    # User message
-    # --------------------------------------------------------
+    query_type = detect_query_type(
+        question
+    )
 
     st.session_state.messages.append(
-
         {
-
             "role":
                 "user",
 
             "content":
                 question,
-
         }
-
     )
-
 
     with st.chat_message(
         "user"
     ):
 
-
         st.markdown(
             question
         )
-
-
-    # --------------------------------------------------------
-    # Assistant answer
-    # --------------------------------------------------------
 
     with st.chat_message(
         "assistant"
     ):
 
+        st.caption(
+            f"Retrieval mode: "
+            f"{query_type}"
+        )
 
         with st.spinner(
-            "Searching the document and generating an answer..."
+            "Searching the portfolio and generating an answer..."
         ):
 
-
             answer, sources = ask_rag(
-
                 question,
-
                 rag[
                     "collection"
                 ],
-
                 rag[
                     "embedding_model"
                 ],
-
                 rag[
                     "reranker"
                 ],
-
                 rag[
                     "rag_chunk_lookup"
                 ],
-
                 rag[
                     "llm"
                 ],
-
             )
-
 
         st.markdown(
             answer
         )
 
-
         show_sources(
             sources
         )
 
-
-    # --------------------------------------------------------
-    # Store assistant answer + evidence
-    # --------------------------------------------------------
-
     st.session_state.messages.append(
-
         {
-
             "role":
                 "assistant",
 
             "content":
                 answer,
 
+            "query_type":
+                query_type,
+
             "sources":
                 sources,
-
         }
-
     )
