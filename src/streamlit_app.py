@@ -379,16 +379,19 @@ example_questions = [
 ]
 
 
-selected_example = st.selectbox(
+example_question = None
 
-    "Choose an example or type your own question below:",
 
-    [
-        "Select an example..."
-    ]
-    + example_questions,
+for example in example_questions:
 
-)
+
+    if st.button(
+        example,
+        use_container_width=True,
+    ):
+
+
+        example_question = example
 
 
 # ============================================================
@@ -450,18 +453,17 @@ question = st.chat_input(
 
 
 # ------------------------------------------------------------
-# Use selected example when the chat box itself is empty.
+# An example button submits exactly one question.
 # ------------------------------------------------------------
 
 if (
     question is None
     and
-    selected_example
-    != "Select an example..."
+    example_question is not None
 ):
 
 
-    question = selected_example
+    question = example_question
 
 
 # ============================================================
