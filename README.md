@@ -7,12 +7,32 @@ It uses a private local MBA portfolio PDF as the knowledge source, but **the PDF
 ## Branch
 
 ```text
-feature/mba-rag-v5-2-neighbor-expansion
+feature/mba-rag-v6-end-to-end-evaluation
 ```
 
 ## Architecture Diagram
 
-![RAG V5.2 Architecture](docs/rag-v5-2-architecture.svg)
+![RAG V6 Architecture](docs/rag-v6-architecture.svg)
+
+## Validation Proof
+
+The observed V6 result is saved in [`docs/results/v6-validation.md`](docs/results/v6-validation.md).
+
+```text
+Total tests: 9
+Total passed: 9
+Answer correctness: 8/8 (100.0%)
+Correct source retrieval: 8/8 (100.0%)
+Valid citation accuracy: 8/8 (100.0%)
+Grounded refusal accuracy: 1/1 (100.0%)
+Overall end-to-end accuracy: 9/9 (100.0%)
+```
+
+Run the evaluation locally with:
+
+```powershell
+uv run python src/rag_v6_evaluation.py
+```
 
 ## Current Architecture
 
@@ -206,4 +226,4 @@ A retrieval failure involving the Agentic RAG architecture was diagnosed and fix
 
 ## Next Step
 
-The next milestone is **end-to-end answer evaluation with Ollama**: verify answer correctness, grounding, and source citations across all six MBA courses before adding a Streamlit interface or agent capabilities.
+V6 end-to-end evaluation is complete. The next milestone is a **Streamlit interface** built on top of the validated V5.2/V6 RAG pipeline.
