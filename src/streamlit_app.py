@@ -12,6 +12,8 @@ from rag_pipeline import (
     BROAD_PER_COURSE_K,
     BROAD_FINAL_PER_COURSE,
     MEMORY_MAX_MESSAGES,
+    PINECONE_INDEX_NAME,
+    PINECONE_NAMESPACE,
     initialize_rag,
     ask_rag,
 )
@@ -35,7 +37,7 @@ from memory_db import (
 
 
 # ============================================================
-# RAG V10 - STREAMLIT PERSISTENT CONVERSATIONAL MEMORY
+# RAG V11 - STREAMLIT PERSISTENT CONVERSATIONAL MEMORY
 #
 # V9 RAG backend stays unchanged.
 #
@@ -77,7 +79,7 @@ if (
     )
 
 st.caption(
-    "Persistent SQLite Memory + Multi-Conversation Chat + "
+    "Pinecone Vector Database + Persistent SQLite Memory + "
     "Query-Aware Retrieval + CrossEncoder Reranking + "
     "Deterministic Citations"
 )
@@ -103,13 +105,13 @@ def load_rag():
 
 try:
     with st.spinner(
-        "Loading RAG V10..."
+        "Loading RAG V11..."
     ):
         rag = load_rag()
 
 except Exception as error:
     st.error(
-        "RAG V10 could not start."
+        "RAG V11 could not start."
     )
     st.exception(error)
     st.stop()
@@ -589,6 +591,32 @@ with st.sidebar:
             "Course relevance gate: enabled"
         )
 
+        st.divider()
+
+        st.write(
+            "**Vector database**"
+        )
+
+        st.code(
+            "Pinecone"
+        )
+
+        st.write(
+            "**Pinecone index**"
+        )
+
+        st.code(
+            PINECONE_INDEX_NAME
+        )
+
+        st.write(
+            "**Pinecone namespace**"
+        )
+
+        st.code(
+            PINECONE_NAMESPACE
+        )
+
 
 # ============================================================
 # CURRENT CONVERSATION
@@ -636,7 +664,7 @@ st.caption(
 )
 
 st.success(
-    f"RAG V10 ready — "
+    f"RAG V11 ready — "
     f"{len(rag['rag_chunks'])} indexed chunks."
 )
 
