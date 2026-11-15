@@ -581,9 +581,7 @@ The RAG source PDF is:
 data/text_files/pdf/WGU_MBA_IT_Management_Bound_Edition_Biography_At_Beginning.pdf
 ```
 
-For this V10 branch, this specific PDF is intentionally tracked in GitHub at the user's explicit request.
-
-Other PDFs remain excluded by `.gitignore`.
+The source PDF is private, kept local, and intentionally excluded from GitHub by `.gitignore`.
 
 ---
 
