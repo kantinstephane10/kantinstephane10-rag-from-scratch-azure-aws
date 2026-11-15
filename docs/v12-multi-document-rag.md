@@ -116,18 +116,33 @@ Stage 1 must pass in Jupyter before Pinecone indexing is added.
 
 ### Stage 2 — Pinecone multi-document index
 
-Planned:
+Status: COMPLETE.
 
-- new V12 Pinecone index;
-- new V12 namespace;
-- index all 27 documents;
-- store provider/document metadata in Pinecone;
-- search across all documents;
-- filter by provider;
-- filter by document;
-- preserve document-safe neighbor expansion.
+Observed Jupyter validation:
 
----
+~~~text
+Index: multicloud-rag-v12
+Namespace: cloud-documents
+Documents: 27
+Pages: 3451
+Chunks: 11502
+Embedding shape: (11502, 384)
+Tests passed: 22/22
+Accuracy: 100.0%
+V12 STAGE 2 PINECONE MULTI-DOCUMENT INDEX: PASS
+~~~
+
+Validated behaviors:
+
+- Pinecone API connectivity
+- 384-dimensional MiniLM embeddings
+- cosine vector metric
+- 11,502 persisted Pinecone records
+- global multi-document semantic retrieval
+- provider filters for AWS, Azure, GCP, Oracle, and IBM
+- document-specific filtering
+- restored provider/document/page metadata
+- document-safe neighbor expansion
 
 ### Stage 3 — Multi-document retrieval
 
