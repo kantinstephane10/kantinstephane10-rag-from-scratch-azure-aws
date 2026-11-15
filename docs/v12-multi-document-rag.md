@@ -67,18 +67,27 @@ document-safe chunk IDs
 document-safe neighbor lookup
 ~~~
 
-Files:
+Notebook-first validation:
+
+- notebooks/v12_multi_document_rag_stage1.ipynb
+
+The notebook contains the complete Stage 1 implementation in one code cell:
+PDF discovery, loading, cleaning, metadata, chunking, document-safe neighbors, and all validation tests.
+
+Run the notebook first and confirm all 17/17 tests pass.
+
+Only after the notebook passes do we move the validated logic into the Python files:
 
 - src/rag_v12_multidoc.py
 - src/rag_v12_multidoc_test.py
 
-Run:
+CLI validation after notebook validation:
 
 ~~~powershell
 uv run python src/rag_v12_multidoc_test.py
 ~~~
 
-Stage 1 must pass before Pinecone indexing is added.
+Stage 1 must pass in Jupyter before Pinecone indexing is added.
 
 ---
 
