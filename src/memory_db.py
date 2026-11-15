@@ -10,8 +10,18 @@ import uuid
 # ============================================================
 
 
-MEMORY_DB_PATH = Path(
-    "data/memory/rag_v10_memory.db"
+PROJECT_ROOT = (
+    Path(__file__)
+    .resolve()
+    .parent
+    .parent
+)
+
+MEMORY_DB_PATH = (
+    PROJECT_ROOT
+    / "data"
+    / "memory"
+    / "rag_v10_memory.db"
 )
 
 MEMORY_MAX_MESSAGES = 12
