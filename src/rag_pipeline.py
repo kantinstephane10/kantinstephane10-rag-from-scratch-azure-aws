@@ -1,7 +1,9 @@
 from pathlib import Path
+import os
 import re
+import time
 
-import chromadb
+from pinecone import DenseVectorQuery, Pinecone, SchemaBuilder
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -9,19 +11,22 @@ from langchain_ollama import ChatOllama
 
 
 # ============================================================
-# RAG V9 - CONVERSATIONAL MEMORY + QUERY-AWARE RETRIEVAL
+# RAG V11 - PINECONE VECTOR DATABASE
 #
-# V8:
+# V9:
+#   - conversational memory
 #   - focused vs broad query routing
-#   - same-course neighbor expansion
+#   - neighbor expansion
 #   - CrossEncoder reranking
 #   - deterministic citations
 #
-# V9:
-#   - short-term conversation memory
-#   - follow-up question rewriting
-#   - broad-query course relevance gate
-#   - conflicting refusal cleanup
+# V10:
+#   - SQLite persistent conversational memory in memory_db.py
+#
+# V11:
+#   - Pinecone replaces ChromaDB as the vector database
+#   - MiniLM embeddings remain local
+#   - retrieval/reranking/generation behavior remains unchanged
 # ============================================================
 
 
@@ -30,8 +35,18 @@ PDF_FILE = Path(
     "WGU_MBA_IT_Management_Bound_Edition_Biography_At_Beginning.pdf"
 )
 
-CHROMA_PATH = "./chroma_db_mba_v9"
-COLLECTION_NAME = "wgu_mba_rag_v9"
+PINECONE_INDEX_NAME = os.getenv(
+    "PINECONE_INDEX_NAME",
+    "mba-rag-v11",
+)
+
+PINECONE_NAMESPACE = os.getenv(
+    "PINECONE_NAMESPACE",
+    "mba-portfolio",
+)
+
+PINECONE_VECTOR_FIELD = "embedding"
+PINECONE_DIMENSION = 384
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
@@ -266,8 +281,156 @@ def load_and_chunk_pdf():
 
 
 # ============================================================
-# VECTOR DATABASE
+# PINECONE VECTOR DATABASE
 # ============================================================
+
+def get_pinecone_client():
+    api_key = os.getenv(
+        "PINECONE_API_KEY"
+    )
+
+    if not api_key:
+        raise RuntimeError(
+            "PINECONE_API_KEY is not set. "
+            "Set it before running V11."
+        )
+
+    return Pinecone(
+        api_key=api_key
+    )
+
+
+def ensure_pinecone_index(
+    pinecone_client,
+):
+    if not pinecone_client.indexes.exists(
+        PINECONE_INDEX_NAME
+    ):
+        print(
+            "Creating Pinecone index:",
+            PINECONE_INDEX_NAME,
+        )
+
+        schema = (
+            SchemaBuilder()
+            .add_dense_vector_field(
+                PINECONE_VECTOR_FIELD,
+                dimension=PINECONE_DIMENSION,
+                metric="cosine",
+            )
+            .build()
+        )
+
+        # Current Pinecone SDK behavior:
+        # without an explicit deployment, this creates
+        # a managed/serverless index on AWS us-east-1.
+        pinecone_client.indexes.create(
+            name=PINECONE_INDEX_NAME,
+            schema=schema,
+        )
+
+        print(
+            "Pinecone index created ✅"
+        )
+
+    else:
+        print(
+            "Pinecone index already exists:",
+            PINECONE_INDEX_NAME,
+        )
+
+        index_info = (
+            pinecone_client.indexes.describe(
+                PINECONE_INDEX_NAME
+            )
+        )
+
+        fields = (
+            index_info
+            .schema
+            .fields
+        )
+
+        if (
+            PINECONE_VECTOR_FIELD
+            not in fields
+        ):
+            raise RuntimeError(
+                "Existing Pinecone index has an "
+                "incompatible schema. Expected "
+                f"vector field: {PINECONE_VECTOR_FIELD}"
+            )
+
+        vector_field = fields[
+            PINECONE_VECTOR_FIELD
+        ]
+
+        if (
+            int(vector_field.dimension)
+            !=
+            PINECONE_DIMENSION
+        ):
+            raise RuntimeError(
+                "Existing Pinecone index dimension "
+                f"is {vector_field.dimension}, "
+                f"but V11 requires "
+                f"{PINECONE_DIMENSION}."
+            )
+
+    return pinecone_client.index(
+        PINECONE_INDEX_NAME
+    )
+
+
+def wait_for_pinecone_documents(
+    index,
+    document_ids,
+    timeout_seconds=60,
+):
+    if not document_ids:
+        return
+
+    sample_ids = [
+        document_ids[0],
+        document_ids[-1],
+    ]
+
+    # Remove duplicate when there is only one document.
+    sample_ids = list(
+        dict.fromkeys(
+            sample_ids
+        )
+    )
+
+    deadline = (
+        time.time()
+        +
+        timeout_seconds
+    )
+
+    while time.time() < deadline:
+        response = (
+            index.documents.fetch(
+                namespace=PINECONE_NAMESPACE,
+                ids=sample_ids,
+            )
+        )
+
+        if (
+            len(response.documents)
+            ==
+            len(sample_ids)
+        ):
+            return
+
+        time.sleep(1)
+
+    raise TimeoutError(
+        "Pinecone documents were accepted but "
+        "did not become searchable within "
+        f"{timeout_seconds} seconds."
+    )
+
 
 def build_vector_database(
     rag_chunks,
@@ -278,7 +441,9 @@ def build_vector_database(
         for chunk in rag_chunks
     ]
 
-    print("\nCreating embeddings...")
+    print(
+        "\nCreating embeddings..."
+    )
 
     embeddings = embedding_model.encode(
         chunk_texts,
@@ -291,57 +456,217 @@ def build_vector_database(
         embeddings.shape,
     )
 
-    client = chromadb.PersistentClient(
-        path=CHROMA_PATH
+    if (
+        embeddings.shape[1]
+        !=
+        PINECONE_DIMENSION
+    ):
+        raise RuntimeError(
+            "Embedding dimension does not match "
+            "the Pinecone schema. "
+            f"Got {embeddings.shape[1]}, "
+            f"expected {PINECONE_DIMENSION}."
+        )
+
+    pinecone_client = (
+        get_pinecone_client()
     )
 
-    try:
-        client.delete_collection(
-            COLLECTION_NAME
-        )
-    except Exception:
-        pass
-
-    collection = client.create_collection(
-        name=COLLECTION_NAME,
-        metadata={
-            "hnsw:space": "cosine",
-        },
+    index = ensure_pinecone_index(
+        pinecone_client
     )
 
     ids = [
         f"mba_chunk_{i:04d}"
-        for i in range(len(rag_chunks))
+        for i in range(
+            len(rag_chunks)
+        )
     ]
 
-    metadatas = []
+    pinecone_documents = []
 
-    for chunk in rag_chunks:
-        metadatas.append(
+    for i, chunk in enumerate(
+        rag_chunks
+    ):
+        pinecone_documents.append(
             {
-                "source": chunk.metadata["source"],
-                "pdf_page": chunk.metadata["pdf_page"],
-                "course": chunk.metadata["course"],
-                "chapter": chunk.metadata["chapter"],
-                "rag_chunk_number": chunk.metadata[
-                    "rag_chunk_number"
-                ],
+                "_id":
+                    ids[i],
+
+                PINECONE_VECTOR_FIELD:
+                    embeddings[i].tolist(),
+
+                "text":
+                    chunk.page_content,
+
+                "source":
+                    chunk.metadata[
+                        "source"
+                    ],
+
+                "pdf_page":
+                    chunk.metadata[
+                        "pdf_page"
+                    ],
+
+                "course":
+                    chunk.metadata[
+                        "course"
+                    ],
+
+                "chapter":
+                    chunk.metadata[
+                        "chapter"
+                    ],
+
+                "rag_chunk_number":
+                    chunk.metadata[
+                        "rag_chunk_number"
+                    ],
             }
         )
 
-    collection.add(
-        ids=ids,
-        documents=chunk_texts,
-        embeddings=embeddings.tolist(),
-        metadatas=metadatas,
+    print(
+        "Upserting documents to Pinecone..."
+    )
+
+    result = (
+        index.documents.batch_upsert(
+            namespace=PINECONE_NAMESPACE,
+            documents=pinecone_documents,
+        )
+    )
+
+    if result.errors:
+        print(
+            "Pinecone upsert errors:"
+        )
+
+        for error in result.errors:
+            print(
+                error.batch_index,
+                error.error_message,
+            )
+
+        raise RuntimeError(
+            "Pinecone batch upsert did not "
+            "complete successfully."
+        )
+
+    wait_for_pinecone_documents(
+        index,
+        ids,
     )
 
     print(
-        "Vectors stored:",
-        collection.count(),
+        "Pinecone documents ready:",
+        len(ids),
     )
 
-    return collection
+    return index
+
+
+def pinecone_search(
+    index,
+    query_embedding,
+    top_k,
+    course=None,
+):
+    metadata_filter = None
+
+    if course is not None:
+        metadata_filter = {
+            "course": {
+                "$eq": course,
+            }
+        }
+
+    results = (
+        index.documents.search(
+            namespace=PINECONE_NAMESPACE,
+
+            top_k=top_k,
+
+            score_by=[
+                DenseVectorQuery(
+                    field=PINECONE_VECTOR_FIELD,
+                    values=query_embedding,
+                )
+            ],
+
+            include_fields=[
+                "text",
+                "source",
+                "pdf_page",
+                "course",
+                "chapter",
+                "rag_chunk_number",
+            ],
+
+            filter=metadata_filter,
+        )
+    )
+
+    candidates = []
+
+    for match in results.matches:
+        candidates.append(
+            {
+                "document":
+                    match.get(
+                        "text",
+                        "",
+                    ),
+
+                "metadata": {
+                    "source":
+                        match.get(
+                            "source",
+                            "",
+                        ),
+
+                    "pdf_page":
+                        int(
+                            match.get(
+                                "pdf_page",
+                                0,
+                            )
+                        ),
+
+                    "course":
+                        match.get(
+                            "course",
+                            "",
+                        ),
+
+                    "chapter":
+                        match.get(
+                            "chapter",
+                            "",
+                        ),
+
+                    "rag_chunk_number":
+                        int(
+                            match.get(
+                                "rag_chunk_number",
+                                0,
+                            )
+                        ),
+                },
+
+                # Pinecone cosine scores are similarity
+                # scores where higher is better.
+                "vector_score":
+                    float(
+                        match.score
+                    ),
+
+                "retrieval_source":
+                    "semantic",
+            }
+        )
+
+    return candidates
 
 
 # ============================================================
@@ -482,28 +807,6 @@ def embed_question(
     )
 
 
-def results_to_candidates(results):
-    documents_found = results["documents"][0]
-    metadata_found = results["metadatas"][0]
-    distances_found = results["distances"][0]
-
-    candidates = []
-
-    for i in range(len(documents_found)):
-        candidates.append(
-            {
-                "document": documents_found[i],
-                "metadata": metadata_found[i],
-                "vector_distance": float(
-                    distances_found[i]
-                ),
-                "retrieval_source": "semantic",
-            }
-        )
-
-    return candidates
-
-
 def add_neighbors(
     candidates,
     rag_chunk_lookup,
@@ -547,7 +850,7 @@ def add_neighbors(
             if offset == 0:
                 retrieval_source = "semantic"
                 vector_distance = candidate[
-                    "vector_distance"
+                    "vector_score"
                 ]
             else:
                 retrieval_source = "neighbor"
@@ -571,7 +874,7 @@ def add_neighbors(
                                 "rag_chunk_number"
                             ],
                     },
-                    "vector_distance":
+                    "vector_score":
                         vector_distance,
                     "retrieval_source":
                         retrieval_source,
@@ -584,7 +887,7 @@ def add_neighbors(
 
                 expanded[
                     neighbor_number
-                ]["vector_distance"] = vector_distance
+                ]["vector_score"] = vector_distance
 
     return list(
         expanded.values()
@@ -641,20 +944,10 @@ def retrieve_focused(
         embedding_model,
     )
 
-    results = collection.query(
-        query_embeddings=(
-            question_embedding.tolist()
-        ),
-        n_results=RETRIEVE_K,
-        include=[
-            "documents",
-            "metadatas",
-            "distances",
-        ],
-    )
-
-    candidates = results_to_candidates(
-        results
+    candidates = pinecone_search(
+        collection,
+        question_embedding[0].tolist(),
+        RETRIEVE_K,
     )
 
     candidates = add_neighbors(
@@ -697,23 +990,11 @@ def retrieve_broad(
     final_results = []
 
     for course in COURSE_CODES:
-        results = collection.query(
-            query_embeddings=(
-                question_embedding.tolist()
-            ),
-            n_results=BROAD_PER_COURSE_K,
-            where={
-                "course": course,
-            },
-            include=[
-                "documents",
-                "metadatas",
-                "distances",
-            ],
-        )
-
-        candidates = results_to_candidates(
-            results
+        candidates = pinecone_search(
+            collection,
+            question_embedding[0].tolist(),
+            BROAD_PER_COURSE_K,
+            course=course,
         )
 
         candidates = add_neighbors(
@@ -1281,11 +1562,11 @@ def initialize_rag():
 # ============================================================
 
 def main():
-    print("\nLoading RAG V9...")
+    print("\nLoading RAG V11...")
 
     rag = initialize_rag()
 
-    print("\nRAG V9 ready.")
+    print("\nRAG V11 ready.")
     print("Type 'exit' to stop.")
     print("Type 'clear' to erase conversation memory.")
 
