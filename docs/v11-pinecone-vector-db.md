@@ -2,9 +2,9 @@
 
 ## Status
 
-Implementation is ready for local validation.
+Pinecone vector-database validation passed locally.
 
-Do not mark V11 complete until the Pinecone-specific regression and the existing RAG regression both pass.
+V11 is not yet complete because the existing RAG regression, V10 memory regression, and Streamlit browser validation still need to be confirmed on the Pinecone branch.
 
 ---
 
@@ -260,7 +260,41 @@ This validates:
 - C200 page 10 retrieval;
 - CrossEncoder compatibility.
 
-No pass count is documented until this test is actually run.
+Observed local result:
+
+```text
+Pinecone API key available: PASS
+Pinecone index exists: PASS
+Dense vector field exists: PASS
+Pinecone dimension = 384: PASS
+Pinecone metric = cosine: PASS
+Pinecone documents persisted: PASS
+Pinecone semantic search returns results: PASS
+Pinecone metadata restored: PASS
+Pinecone similarity score returned: PASS
+Pinecone metadata filter returns results: PASS
+Pinecone metadata filter stays in C200: PASS
+Focused retrieval returns Best 3: PASS
+Focused retrieval includes C200 page 10: PASS
+CrossEncoder reranking still works: PASS
+
+Tests passed: 14/14
+Accuracy: 100.0%
+V11 PINECONE VECTOR DATABASE: PASS
+```
+
+Observed initialization:
+
+```text
+Pages loaded: 143
+All chunks: 366
+Course chunks: 354
+Final indexed chunks: 351
+Embedding shape: (351, 384)
+Pinecone documents ready: 351
+Index: mba-rag-v11
+Namespace: mba-portfolio
+```
 
 ### 2. Existing RAG regression
 
