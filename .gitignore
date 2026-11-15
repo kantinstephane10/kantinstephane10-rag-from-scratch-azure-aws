@@ -10,6 +10,12 @@ __pycache__/
 chroma_db/
 chroma_db_*/
 
+# Local persistent conversation memory
+data/memory/
+*.db
+*.db-shm
+*.db-wal
+
 # Keep private source documents out of GitHub.
 *.pdf
 data/text_files/pdf/*
