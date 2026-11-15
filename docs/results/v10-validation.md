@@ -307,7 +307,7 @@ V10 uses:
 data/text_files/pdf/WGU_MBA_IT_Management_Bound_Edition_Biography_At_Beginning.pdf
 ```
 
-For this V10 branch, the source PDF is intentionally tracked in GitHub at the user's explicit request.
+The source PDF is private, kept local, and intentionally excluded from GitHub by `.gitignore`.
 
 ---
 
