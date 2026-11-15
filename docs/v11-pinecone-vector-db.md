@@ -302,7 +302,28 @@ Namespace: mba-portfolio
 uv run python src/rag_v9_evaluation.py
 ```
 
-The existing 12/12 regression must continue to pass with Pinecone.
+Observed result on the Pinecone V11 branch:
+
+```text
+Five CliftonStrengths: PASS
+Follow-up 1 rewritten with memory: PASS
+Follow-up 1 answer = Learner: PASS
+Agentic RAG technologies: PASS
+Agentic RAG citation grounded: PASS
+Follow-up 2 rewritten with memory: PASS
+Follow-up 2 answer = Azure AI Search: PASS
+Broad router: PASS
+Project Management course found: PASS
+C200 false positive removed: PASS
+Course relevance gate: PASS
+Grounded refusal: PASS
+
+Tests passed: 12/12
+Accuracy: 100.0%
+V9 REGRESSION TEST: PASS
+```
+
+This confirms that replacing ChromaDB with Pinecone preserved the validated retrieval, reranking, citation, conversational follow-up, broad-query filtering, and grounded-refusal behavior.
 
 ### 3. V10 memory regression
 
