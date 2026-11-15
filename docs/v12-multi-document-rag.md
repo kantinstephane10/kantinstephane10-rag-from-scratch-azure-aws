@@ -211,3 +211,41 @@ Do not mark it complete until:
 5. document-aware citations pass;
 6. V9/V10 regressions remain healthy where applicable;
 7. Streamlit browser validation passes.
+
+
+### Stage 3 — Multi-document retrieval + reranking
+
+Status: COMPLETE.
+
+Observed Jupyter validation:
+
+~~~text
+Pinecone index: multicloud-rag-v12
+Documents: 27
+Pages: 3451
+Chunks: 11502
+Embedding model: sentence-transformers/all-MiniLM-L6-v2
+Reranker: cross-encoder/ms-marco-MiniLM-L6-v2
+Semantic Top K: 8
+Neighbor range: 1
+Final Top K: 5
+Tests passed: 27/27
+Accuracy: 100.0%
+V12 STAGE 3 MULTI-DOCUMENT RETRIEVAL + RERANKING: PASS
+~~~
+
+Validated behaviors:
+
+- global multi-cloud retrieval
+- AWS provider retrieval
+- Azure provider retrieval
+- GCP provider retrieval
+- Oracle provider retrieval
+- IBM provider retrieval
+- specific-document retrieval
+- cross-provider retrieval
+- cross-document retrieval
+- document-safe neighbor expansion
+- duplicate removal
+- CrossEncoder reranking
+- citation-ready provider/document/page metadata
