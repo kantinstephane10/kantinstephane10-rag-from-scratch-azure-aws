@@ -16,6 +16,9 @@ data/memory/
 *.db-shm
 *.db-wal
 
-# Keep private source documents out of GitHub.
+# Keep other private source documents out of GitHub.
 *.pdf
 data/text_files/pdf/*
+
+# V10 explicitly tracks the MBA source PDF used by this RAG project.
+!data/text_files/pdf/WGU_MBA_IT_Management_Bound_Edition_Biography_At_Beginning.pdf
