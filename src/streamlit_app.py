@@ -16,20 +16,38 @@ from rag_pipeline import (
     ask_rag,
 )
 
+from memory_db import (
+    MEMORY_DB_PATH,
+    initialize_database,
+    list_conversations,
+    get_conversation,
+    get_or_create_latest_conversation,
+    create_new_chat,
+    rename_conversation,
+    clear_conversation,
+    delete_conversation,
+    load_messages,
+    load_recent_memory,
+    save_message,
+    count_messages,
+    auto_title_conversation,
+)
+
 
 # ============================================================
-# RAG V9 - STREAMLIT CONVERSATIONAL MEMORY
+# RAG V10 - STREAMLIT PERSISTENT CONVERSATIONAL MEMORY
 #
-# Streamlit chat
-#   -> session conversation history
-#   -> follow-up question rewriting
-#   -> query router
-#   -> focused or broad retrieval
-#   -> broad-query course relevance gate
-#   -> CrossEncoder reranking
-#   -> Ollama
-#   -> deterministic Python citations
-#   -> final answer
+# V9 RAG backend stays unchanged.
+#
+# V10 adds:
+# - SQLite persistent memory
+# - multiple conversations
+# - new/resume chat
+# - automatic chat titles
+# - rename
+# - clear
+# - delete
+# - restart persistence
 # ============================================================
 
 
@@ -38,21 +56,28 @@ from rag_pipeline import (
 # ============================================================
 
 st.set_page_config(
-    page_title="MBA RAG Assistant V9",
+    page_title="MBA RAG Assistant V10",
     page_icon="📚",
     layout="wide",
 )
 
 
 st.title(
-    "📚 MBA RAG Assistant V9"
+    "📚 MBA RAG Assistant V10"
 )
 
 st.caption(
-    "Conversational Memory + Query-Aware Retrieval + "
-    "Course Relevance Filtering + Neighbor Expansion + "
-    "CrossEncoder Reranking + Deterministic Citations"
+    "Persistent SQLite Memory + Multi-Conversation Chat + "
+    "Query-Aware Retrieval + CrossEncoder Reranking + "
+    "Deterministic Citations"
 )
+
+
+# ============================================================
+# INITIALIZE PERSISTENT MEMORY
+# ============================================================
+
+initialize_database()
 
 
 # ============================================================
@@ -68,34 +93,54 @@ def load_rag():
 
 try:
     with st.spinner(
-        "Loading RAG V9..."
+        "Loading RAG V10..."
     ):
         rag = load_rag()
 
 except Exception as error:
     st.error(
-        "RAG V9 could not start."
+        "RAG V10 could not start."
     )
     st.exception(error)
     st.stop()
 
 
 # ============================================================
-# SESSION MEMORY
+# ACTIVE CONVERSATION
 # ============================================================
 
 if (
-    "messages"
+    "conversation_id"
     not in st.session_state
 ):
-    st.session_state.messages = []
+    st.session_state.conversation_id = (
+        get_or_create_latest_conversation()
+    )
 
 
 # ============================================================
-# SOURCE DISPLAY
+# HELPERS
 # ============================================================
 
-def show_sources(sources):
+def switch_conversation(
+    conversation_id,
+):
+    st.session_state.conversation_id = (
+        conversation_id
+    )
+
+    if (
+        "conversation_selector"
+        in st.session_state
+    ):
+        del st.session_state[
+            "conversation_selector"
+        ]
+
+
+def show_sources(
+    sources,
+):
     if not sources:
         return
 
@@ -106,9 +151,10 @@ def show_sources(sources):
             sources,
             start=1,
         ):
-            metadata = source[
-                "metadata"
-            ]
+            metadata = source.get(
+                "metadata",
+                {},
+            )
 
             st.markdown(
                 f"### Source {i}"
@@ -116,38 +162,54 @@ def show_sources(sources):
 
             st.write(
                 "**Course:**",
-                metadata["course"],
+                metadata.get(
+                    "course",
+                    "",
+                ),
             )
 
             st.write(
                 "**Course title:**",
-                metadata["chapter"],
+                metadata.get(
+                    "chapter",
+                    "",
+                ),
             )
 
             st.write(
                 "**PDF page:**",
-                metadata["pdf_page"],
+                metadata.get(
+                    "pdf_page",
+                    "",
+                ),
             )
 
             st.write(
                 "**Retrieval source:**",
-                source[
-                    "retrieval_source"
-                ],
-            )
-
-            st.write(
-                "**Reranker score:**",
-                round(
-                    source[
-                        "reranker_score"
-                    ],
-                    4,
+                source.get(
+                    "retrieval_source",
+                    "",
                 ),
             )
 
+            reranker_score = source.get(
+                "reranker_score"
+            )
+
+            if reranker_score is not None:
+                st.write(
+                    "**Reranker score:**",
+                    round(
+                        reranker_score,
+                        4,
+                    ),
+                )
+
             st.text(
-                source["document"]
+                source.get(
+                    "document",
+                    "",
+                )
             )
 
             if i < len(sources):
@@ -160,111 +222,373 @@ def show_sources(sources):
 
 with st.sidebar:
     st.header(
-        "RAG V9 Configuration"
+        "💬 Conversations"
     )
 
-    st.write(
-        "**Embedding model**"
-    )
-    st.code(
-        EMBEDDING_MODEL
-    )
+    # --------------------------------------------------------
+    # NEW CHAT
+    # --------------------------------------------------------
 
-    st.write(
-        "**Reranker**"
-    )
-    st.code(
-        RERANKER_MODEL
-    )
+    if st.button(
+        "➕ New Conversation",
+        use_container_width=True,
+    ):
+        new_conversation_id = (
+            create_new_chat()
+        )
 
-    st.write(
-        "**Generation model**"
-    )
-    st.code(
-        OLLAMA_MODEL
-    )
+        switch_conversation(
+            new_conversation_id
+        )
 
-    st.divider()
+        st.rerun()
 
-    st.write(
-        f"**Chunk size:** "
-        f"{CHUNK_SIZE}"
-    )
 
-    st.write(
-        f"**Chunk overlap:** "
-        f"{CHUNK_OVERLAP}"
-    )
-
-    st.write(
-        f"**Focused candidates:** "
-        f"{RETRIEVE_K}"
-    )
-
-    st.write(
-        f"**Neighbor range:** "
-        f"±{NEIGHBOR_RANGE}"
-    )
-
-    st.write(
-        f"**Focused final chunks:** "
-        f"{FINAL_K}"
-    )
+    # --------------------------------------------------------
+    # SAVED CHATS
+    # --------------------------------------------------------
 
     st.divider()
 
-    st.write(
-        "**Broad retrieval**"
+    conversations = (
+        list_conversations()
     )
 
-    st.write(
-        f"{BROAD_PER_COURSE_K} "
-        "candidates/course"
-    )
+    conversation_map = {
+        conversation["id"]:
+            conversation
+        for conversation
+        in conversations
+    }
 
-    st.write(
-        f"{BROAD_FINAL_PER_COURSE} "
-        "final chunks/course"
-    )
+    conversation_ids = [
+        conversation["id"]
+        for conversation
+        in conversations
+    ]
 
-    st.write(
-        "Course relevance gate: enabled"
-    )
+    if conversation_ids:
+        current_id = (
+            st.session_state.conversation_id
+        )
+
+        if current_id not in conversation_ids:
+            current_id = (
+                conversation_ids[0]
+            )
+
+            st.session_state.conversation_id = (
+                current_id
+            )
+
+        current_index = (
+            conversation_ids.index(
+                current_id
+            )
+        )
+
+        selected_conversation_id = (
+            st.selectbox(
+                "Previous conversations",
+                options=conversation_ids,
+                index=current_index,
+                format_func=lambda conversation_id:
+                    conversation_map[
+                        conversation_id
+                    ]["title"],
+                key="conversation_selector",
+            )
+        )
+
+        if (
+            selected_conversation_id
+            !=
+            st.session_state.conversation_id
+        ):
+            st.session_state.conversation_id = (
+                selected_conversation_id
+            )
+
+            st.rerun()
+
+
+    # --------------------------------------------------------
+    # CURRENT CHAT CONTROLS
+    # --------------------------------------------------------
 
     st.divider()
 
+    current_conversation_id = (
+        st.session_state.conversation_id
+    )
+
+    current_conversation = (
+        get_conversation(
+            current_conversation_id
+        )
+    )
+
+    if current_conversation is None:
+        current_conversation_id = (
+            create_new_chat()
+        )
+
+        switch_conversation(
+            current_conversation_id
+        )
+
+        current_conversation = (
+            get_conversation(
+                current_conversation_id
+            )
+        )
+
     st.write(
-        "**Conversation memory**"
+        "**Current conversation**"
     )
 
     st.write(
-        f"Recent messages used: "
+        current_conversation[
+            "title"
+        ]
+    )
+
+    st.caption(
+        f"{count_messages(current_conversation_id)} "
+        "stored messages"
+    )
+
+
+    # --------------------------------------------------------
+    # RENAME
+    # --------------------------------------------------------
+
+    rename_value = st.text_input(
+        "Rename conversation",
+        value=current_conversation[
+            "title"
+        ],
+        key=(
+            "rename_"
+            + current_conversation_id
+        ),
+    )
+
+    if st.button(
+        "Rename",
+        use_container_width=True,
+    ):
+        rename_conversation(
+            current_conversation_id,
+            rename_value,
+        )
+
+        if (
+            "conversation_selector"
+            in st.session_state
+        ):
+            del st.session_state[
+                "conversation_selector"
+            ]
+
+        st.rerun()
+
+
+    # --------------------------------------------------------
+    # CLEAR
+    # --------------------------------------------------------
+
+    if st.button(
+        "🧹 Clear Conversation",
+        use_container_width=True,
+    ):
+        clear_conversation(
+            current_conversation_id
+        )
+
+        st.rerun()
+
+
+    # --------------------------------------------------------
+    # DELETE
+    # --------------------------------------------------------
+
+    if st.button(
+        "🗑️ Delete Conversation",
+        use_container_width=True,
+    ):
+        delete_conversation(
+            current_conversation_id
+        )
+
+        remaining = (
+            list_conversations()
+        )
+
+        if remaining:
+            next_id = (
+                remaining[0]["id"]
+            )
+        else:
+            next_id = (
+                create_new_chat()
+            )
+
+        switch_conversation(
+            next_id
+        )
+
+        st.rerun()
+
+
+    # --------------------------------------------------------
+    # MEMORY STATUS
+    # --------------------------------------------------------
+
+    st.divider()
+
+    st.subheader(
+        "Persistent Memory"
+    )
+
+    st.write(
+        f"**Recent messages sent to LLM:** "
         f"{MEMORY_MAX_MESSAGES}"
     )
 
     st.write(
-        f"Current chat messages: "
-        f"{len(st.session_state.messages)}"
+        "**Storage:** SQLite"
     )
 
-    st.info(
-        "V9 remembers recent conversation turns "
-        "during the current Streamlit session."
+    st.code(
+        str(
+            MEMORY_DB_PATH
+        )
     )
 
-    if st.button(
-        "Clear conversation"
+    st.success(
+        "Conversation history survives "
+        "application restarts."
+    )
+
+
+    # --------------------------------------------------------
+    # RAG SETTINGS
+    # --------------------------------------------------------
+
+    st.divider()
+
+    with st.expander(
+        "RAG Configuration"
     ):
-        st.session_state.messages = []
-        st.rerun()
+        st.write(
+            "**Embedding model**"
+        )
+        st.code(
+            EMBEDDING_MODEL
+        )
+
+        st.write(
+            "**Reranker**"
+        )
+        st.code(
+            RERANKER_MODEL
+        )
+
+        st.write(
+            "**Generation model**"
+        )
+        st.code(
+            OLLAMA_MODEL
+        )
+
+        st.write(
+            f"Chunk size: "
+            f"{CHUNK_SIZE}"
+        )
+
+        st.write(
+            f"Chunk overlap: "
+            f"{CHUNK_OVERLAP}"
+        )
+
+        st.write(
+            f"Focused candidates: "
+            f"{RETRIEVE_K}"
+        )
+
+        st.write(
+            f"Neighbor range: "
+            f"±{NEIGHBOR_RANGE}"
+        )
+
+        st.write(
+            f"Focused final context: "
+            f"{FINAL_K}"
+        )
+
+        st.write(
+            f"Broad candidates/course: "
+            f"{BROAD_PER_COURSE_K}"
+        )
+
+        st.write(
+            f"Broad final/course: "
+            f"{BROAD_FINAL_PER_COURSE}"
+        )
+
+        st.write(
+            "Course relevance gate: enabled"
+        )
 
 
 # ============================================================
-# READY STATUS
+# CURRENT CONVERSATION
 # ============================================================
+
+current_conversation_id = (
+    st.session_state.conversation_id
+)
+
+current_conversation = (
+    get_conversation(
+        current_conversation_id
+    )
+)
+
+if current_conversation is None:
+    current_conversation_id = (
+        create_new_chat()
+    )
+
+    switch_conversation(
+        current_conversation_id
+    )
+
+    current_conversation = (
+        get_conversation(
+            current_conversation_id
+        )
+    )
+
+
+# ============================================================
+# HEADER
+# ============================================================
+
+st.subheader(
+    current_conversation[
+        "title"
+    ]
+)
+
+st.caption(
+    f"Conversation ID: "
+    f"{current_conversation_id}"
+)
 
 st.success(
-    f"RAG V9 ready — "
+    f"RAG V10 ready — "
     f"{len(rag['rag_chunks'])} indexed chunks."
 )
 
@@ -273,43 +597,53 @@ st.success(
 # EXAMPLE QUESTIONS
 # ============================================================
 
-st.subheader(
-    "Example Questions"
-)
-
-example_questions = [
-    "What are my five CliftonStrengths?",
-    "Which one was ranked highest?",
-    (
-        "What technologies were proposed "
-        "for the Agentic RAG architecture?"
-    ),
-    (
-        "Which one provides the search "
-        "and retrieval layer?"
-    ),
-    (
-        "Identify all courses in my MBA portfolio "
-        "that discuss project management."
-    ),
-    "What is Microsoft's current stock price?",
-]
-
 example_question = None
 
-for example in example_questions:
-    if st.button(
-        example,
-        use_container_width=True,
+with st.expander(
+    "Example Questions"
+):
+    example_questions = [
+        "What are my five CliftonStrengths?",
+        "Which one was ranked highest?",
+        (
+            "What technologies were proposed "
+            "for the Agentic RAG architecture?"
+        ),
+        (
+            "Which one provides the search "
+            "and retrieval layer?"
+        ),
+        (
+            "Identify all courses in my MBA portfolio "
+            "that discuss project management."
+        ),
+        "What is Microsoft's current stock price?",
+    ]
+
+    for i, example in enumerate(
+        example_questions,
+        start=1,
     ):
-        example_question = example
+        if st.button(
+            example,
+            use_container_width=True,
+            key=(
+                f"example_{i}_"
+                f"{current_conversation_id}"
+            ),
+        ):
+            example_question = example
 
 
 # ============================================================
-# DISPLAY CHAT HISTORY
+# DISPLAY PERSISTED CHAT HISTORY
 # ============================================================
 
-for message in st.session_state.messages:
+messages = load_messages(
+    current_conversation_id
+)
+
+for message in messages:
     with st.chat_message(
         message["role"]
     ):
@@ -319,14 +653,17 @@ for message in st.session_state.messages:
 
         if (
             message["role"]
-            == "assistant"
+            ==
+            "assistant"
         ):
             query_type = message.get(
                 "query_type"
             )
 
-            standalone_question = message.get(
-                "standalone_question"
+            standalone_question = (
+                message.get(
+                    "standalone_question"
+                )
             )
 
             if query_type:
@@ -343,6 +680,7 @@ for message in st.session_state.messages:
                     st.write(
                         "**Standalone retrieval question:**"
                     )
+
                     st.write(
                         standalone_question
                     )
@@ -369,7 +707,9 @@ if (
     question is None
     and example_question is not None
 ):
-    question = example_question
+    question = (
+        example_question
+    )
 
 
 # ============================================================
@@ -377,10 +717,12 @@ if (
 # ============================================================
 
 if question:
-    # Existing conversation only.
-    # The current question is added after the answer.
-    conversation_history = list(
-        st.session_state.messages
+    # SQLite is the source of truth.
+    # Load only the most recent memory window for the LLM.
+    conversation_history = (
+        load_recent_memory(
+            current_conversation_id
+        )
     )
 
     with st.chat_message(
@@ -394,8 +736,8 @@ if question:
         "assistant"
     ):
         with st.spinner(
-            "Using conversation memory and searching "
-            "the MBA portfolio..."
+            "Loading persistent memory and "
+            "searching the MBA portfolio..."
         ):
             (
                 answer,
@@ -422,11 +764,13 @@ if question:
         )
 
         with st.expander(
-            "Conversation memory / interpreted question"
+            "Conversation memory / "
+            "interpreted question"
         ):
             st.write(
                 "**Original question:**"
             )
+
             st.write(
                 question
             )
@@ -434,6 +778,7 @@ if question:
             st.write(
                 "**Standalone retrieval question:**"
             )
+
             st.write(
                 standalone_question
             )
@@ -442,22 +787,37 @@ if question:
             sources
         )
 
-    # Save after generation so the current turn becomes
+    # Save current turn after generation so it becomes
     # memory for the NEXT question.
-    st.session_state.messages.append(
-        {
-            "role": "user",
-            "content": question,
-        }
+    save_message(
+        conversation_id=
+            current_conversation_id,
+        role="user",
+        content=question,
     )
 
-    st.session_state.messages.append(
-        {
-            "role": "assistant",
-            "content": answer,
-            "query_type": query_type,
-            "standalone_question":
-                standalone_question,
-            "sources": sources,
-        }
+    save_message(
+        conversation_id=
+            current_conversation_id,
+        role="assistant",
+        content=answer,
+        query_type=query_type,
+        standalone_question=
+            standalone_question,
+        sources=sources,
     )
+
+    auto_title_conversation(
+        current_conversation_id,
+        question,
+    )
+
+    if (
+        "conversation_selector"
+        in st.session_state
+    ):
+        del st.session_state[
+            "conversation_selector"
+        ]
+
+    st.rerun()
