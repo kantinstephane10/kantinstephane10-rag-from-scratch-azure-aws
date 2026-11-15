@@ -66,6 +66,16 @@ st.title(
     "📚 MBA RAG Assistant V10"
 )
 
+if (
+    "rename_success_message"
+    in st.session_state
+):
+    st.success(
+        st.session_state.pop(
+            "rename_success_message"
+        )
+    )
+
 st.caption(
     "Persistent SQLite Memory + Multi-Conversation Chat + "
     "Query-Aware Retrieval + CrossEncoder Reranking + "
@@ -361,37 +371,75 @@ with st.sidebar:
 
     # --------------------------------------------------------
     # RENAME
+    #
+    # Use a form so Streamlit submits the text value and
+    # Rename action together as one event.
     # --------------------------------------------------------
 
-    rename_value = st.text_input(
-        "Rename conversation",
-        value=current_conversation[
-            "title"
-        ],
-        key=(
-            "rename_"
-            + current_conversation_id
-        ),
+    rename_input_key = (
+        "rename_input_"
+        + current_conversation_id
     )
 
-    if st.button(
-        "Rename",
-        use_container_width=True,
+    rename_form_key = (
+        "rename_form_"
+        + current_conversation_id
+    )
+
+    with st.form(
+        key=rename_form_key,
+        clear_on_submit=False,
     ):
-        rename_conversation(
-            current_conversation_id,
-            rename_value,
+        rename_value = st.text_input(
+            "Rename conversation",
+            value=current_conversation[
+                "title"
+            ],
+            key=rename_input_key,
         )
 
-        if (
-            "conversation_selector"
-            in st.session_state
-        ):
-            del st.session_state[
-                "conversation_selector"
-            ]
+        rename_submitted = (
+            st.form_submit_button(
+                "Rename",
+                use_container_width=True,
+            )
+        )
 
-        st.rerun()
+    if rename_submitted:
+        new_title = (
+            rename_value.strip()
+        )
+
+        if not new_title:
+            st.warning(
+                "Conversation title cannot be empty."
+            )
+
+        elif (
+            new_title
+            ==
+            current_conversation[
+                "title"
+            ]
+        ):
+            st.info(
+                "The conversation already has that title."
+            )
+
+        else:
+            rename_conversation(
+                current_conversation_id,
+                new_title,
+            )
+
+            st.session_state[
+                "rename_success_message"
+            ] = (
+                f"Conversation renamed to: "
+                f"{new_title}"
+            )
+
+            st.rerun()
 
 
     # --------------------------------------------------------
