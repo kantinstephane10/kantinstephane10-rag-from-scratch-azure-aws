@@ -1,0 +1,272 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120">
+<defs>
+  <linearGradient id="blue" x1="0" x2="1"><stop offset="0" stop-color="#eef6ff"/><stop offset="1" stop-color="#fbfdff"/></linearGradient>
+  <linearGradient id="purple" x1="0" x2="1"><stop offset="0" stop-color="#f5efff"/><stop offset="1" stop-color="#fcfaff"/></linearGradient>
+  <linearGradient id="green" x1="0" x2="1"><stop offset="0" stop-color="#edf9f2"/><stop offset="1" stop-color="#fbfffd"/></linearGradient>
+  <linearGradient id="orange" x1="0" x2="1"><stop offset="0" stop-color="#fff4e8"/><stop offset="1" stop-color="#fffaf5"/></linearGradient>
+  <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+    <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#16324f" flood-opacity=".13"/>
+  </filter>
+  <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+    <feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <marker id="ab" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#2563eb"/></marker>
+  <marker id="ap" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#7c3aed"/></marker>
+  <marker id="ag" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#059669"/></marker>
+  <marker id="ao" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#ea580c"/></marker>
+  <style>
+    .title{font:700 38px Arial,Helvetica,sans-serif;fill:#102a56}
+    .subtitle{font:400 16px Arial,Helvetica,sans-serif;fill:#475569}
+    .lane{font:700 17px Arial,Helvetica,sans-serif;fill:#fff}
+    .section{font:700 19px Arial,Helvetica,sans-serif;fill:#14396e}
+    .bt{font:700 14px Arial,Helvetica,sans-serif;fill:#111827}
+    .bs{font:400 11px Arial,Helvetica,sans-serif;fill:#475569}
+    .small{font:600 11px Arial,Helvetica,sans-serif;fill:#334155}
+    .box{fill:#fff;stroke:#82aeda;stroke-width:1.5;rx:14;filter:url(#shadow)}
+    .boxP{fill:#fff;stroke:#a78bfa;stroke-width:1.5;rx:14;filter:url(#shadow)}
+    .boxG{fill:#fff;stroke:#6cc49b;stroke-width:1.5;rx:14;filter:url(#shadow)}
+    .boxO{fill:#fff;stroke:#f2a95c;stroke-width:1.5;rx:14;filter:url(#shadow)}
+    .fb{stroke:#2563eb;stroke-width:2.7;fill:none;marker-end:url(#ab)}
+    .fp{stroke:#7c3aed;stroke-width:2.7;fill:none;marker-end:url(#ap)}
+    .fg{stroke:#059669;stroke-width:2.7;fill:none;marker-end:url(#ag)}
+    .fo{stroke:#ea580c;stroke-width:2.7;fill:none;marker-end:url(#ao)}
+    .dash{stroke-dasharray:8 7;animation:dash 2.5s linear infinite}
+    @keyframes dash{to{stroke-dashoffset:-32}}
+  </style>
+  <path id="indexPath" d="M350 205 H515 H680 H850 H1040 H1240 H1460" fill="none"/>
+  <path id="runtimePath" d="M355 440 H585 H815 H1035 H1245 V575 H425 H625 H820 H990 V850 H390 H590 H790 H1010 H1240 H1470 H1640" fill="none"/>
+</defs>
+
+<rect width="1800" height="1120" fill="#fff"/>
+<text x="42" y="48" class="title">RAG V11 – Pinecone Vector Database Architecture</text>
+<text x="42" y="76" class="subtitle">Local MiniLM embeddings • Pinecone vector search • CrossEncoder reranking • Ollama generation • SQLite persistent conversations</text>
+
+<!-- indexing -->
+<rect x="22" y="110" width="1756" height="190" rx="22" fill="url(#blue)" stroke="#7aaee3"/>
+<rect x="22" y="110" width="245" height="190" rx="22" fill="#2563eb"/>
+<text x="48" y="152" class="lane">Document Preparation</text>
+<text x="48" y="176" class="lane">&amp; Pinecone Indexing</text>
+<text x="48" y="205" font-family="Arial" font-size="12.5" font-style="italic" fill="#eaf3ff">build / refresh pipeline</text>
+
+<rect x="295" y="150" width="110" height="110" class="box"/>
+<rect x="323" y="169" width="54" height="40" rx="5" fill="#e11d48"/>
+<text x="350" y="195" text-anchor="middle" font-family="Arial" font-size="14" font-weight="700" fill="#fff">PDF</text>
+<text x="350" y="237" text-anchor="middle" class="bt">Private Source</text>
+
+<rect x="445" y="150" width="140" height="110" class="box"/>
+<circle cx="485" cy="184" r="19" fill="#3776AB"/>
+<text x="485" y="190" text-anchor="middle" font-family="Arial" font-size="11" font-weight="700" fill="#fff">Py</text>
+<text x="530" y="181" class="bt">Clean Text</text>
+<text x="530" y="203" class="bs">PyMuPDF + regex</text>
+<text x="530" y="224" class="bs">143 pages</text>
+
+<rect x="615" y="150" width="130" height="110" class="box"/>
+<circle cx="655" cy="184" r="19" fill="#3776AB"/>
+<text x="655" y="190" text-anchor="middle" font-family="Arial" font-size="11" font-weight="700" fill="#fff">Py</text>
+<text x="700" y="181" class="bt">Metadata</text>
+<text x="700" y="203" class="bs">course • page</text>
+<text x="700" y="224" class="bs">chapter • chunk</text>
+
+<rect x="775" y="150" width="150" height="110" class="box"/>
+<circle cx="815" cy="184" r="19" fill="#3776AB"/>
+<text x="815" y="190" text-anchor="middle" font-family="Arial" font-size="11" font-weight="700" fill="#fff">Py</text>
+<text x="860" y="181" class="bt">Chunking</text>
+<text x="860" y="203" class="bs">800 chars</text>
+<text x="860" y="224" class="bs">overlap 120</text>
+
+<rect x="955" y="150" width="170" height="110" class="box"/>
+<circle cx="995" cy="184" r="21" fill="#FFD21E"/>
+<text x="995" y="190" text-anchor="middle" font-family="Arial" font-size="10" font-weight="700" fill="#111827">HF</text>
+<text x="1040" y="181" class="bt">MiniLM</text>
+<text x="1040" y="203" class="bs">351 chunks</text>
+<text x="1040" y="224" class="bs">384-d normalized vectors</text>
+
+<rect x="1150" y="140" width="180" height="130" rx="16" fill="#fff" stroke="#22c55e" stroke-width="1.8" filter="url(#shadow)"/>
+<g transform="translate(1180 165)">
+  <circle cx="18" cy="18" r="17" fill="#111827"/>
+  <path d="M10 21c5-12 20-12 25 0c-5-4-20-4-25 0z" fill="#22c55e"/>
+  <path d="M12 14c7-9 16-9 22 0" fill="none" stroke="#22c55e" stroke-width="3"/>
+</g>
+<text x="1240" y="177" class="bt">Pinecone</text>
+<text x="1240" y="199" class="bs">index: mba-rag-v11</text>
+<text x="1240" y="220" class="bs">namespace: mba-portfolio</text>
+<text x="1240" y="241" class="bs">cosine • 351 documents</text>
+
+<rect x="1370" y="150" width="180" height="110" class="box"/>
+<text x="1460" y="180" text-anchor="middle" class="bt">Stored Metadata</text>
+<text x="1460" y="202" text-anchor="middle" class="bs">text • source • page</text>
+<text x="1460" y="221" text-anchor="middle" class="bs">course • chapter • chunk</text>
+<path d="M405 205 H445 M585 205 H615 M745 205 H775 M925 205 H955 M1125 205 H1150 M1330 205 H1370" class="fb dash"/>
+
+<!-- conversation -->
+<rect x="22" y="330" width="1756" height="210" rx="22" fill="url(#purple)" stroke="#b69ae8"/>
+<rect x="22" y="330" width="245" height="210" rx="22" fill="#7c3aed"/>
+<text x="48" y="372" class="lane">Conversation</text>
+<text x="48" y="396" class="lane">&amp; Query Understanding</text>
+<text x="48" y="425" font-family="Arial" font-size="12.5" font-style="italic" fill="#f3eaff">runtime</text>
+
+<rect x="295" y="375" width="120" height="120" class="boxP"/>
+<path d="M335 397 L355 425 L315 425 Z" fill="#FF4B4B"/>
+<text x="355" y="453" text-anchor="middle" class="bt">User Question</text>
+<text x="355" y="474" text-anchor="middle" class="bs">Streamlit</text>
+
+<rect x="455" y="375" width="260" height="120" class="boxP"/>
+<ellipse cx="495" cy="403" rx="18" ry="8" fill="#0f766e"/>
+<rect x="477" y="403" width="36" height="18" fill="#0f766e"/>
+<ellipse cx="495" cy="421" rx="18" ry="8" fill="#115e59"/>
+<text x="535" y="404" class="bt">SQLite Persistent Memory</text>
+<text x="535" y="426" class="bs">full conversation history</text>
+<text x="535" y="447" class="bs">recent 12 messages to LLM</text>
+<text x="535" y="468" class="bs">restart persistence</text>
+
+<rect x="755" y="375" width="180" height="120" class="boxP"/>
+<circle cx="795" cy="407" r="18" fill="#111827"/>
+<text x="795" y="413" text-anchor="middle" font-family="Arial" font-size="10" font-weight="700" fill="#fff">LLM</text>
+<text x="840" y="404" class="bt">Follow-Up Rewriter</text>
+<text x="840" y="426" class="bs">resolves references</text>
+<text x="840" y="447" class="bs">standalone question</text>
+
+<rect x="975" y="375" width="150" height="120" class="boxP"/>
+<circle cx="1015" cy="407" r="18" fill="#3776AB"/>
+<text x="1015" y="413" text-anchor="middle" font-family="Arial" font-size="11" font-weight="700" fill="#fff">Py</text>
+<text x="1060" y="404" class="bt">Query Router</text>
+<text x="1060" y="426" class="bs">focused / broad</text>
+
+<rect x="1165" y="365" width="510" height="140" rx="16" fill="#fff" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="1195" y="394" class="bt">Conversation Controls</text>
+<text x="1195" y="422" class="bs">➕ New</text>
+<text x="1195" y="447" class="bs">↔ Switch</text>
+<text x="1320" y="422" class="bs">✎ Auto-title</text>
+<text x="1320" y="447" class="bs">✎ Rename</text>
+<text x="1450" y="422" class="bs">🧹 Clear</text>
+<text x="1450" y="447" class="bs">🗑 Delete</text>
+<text x="1560" y="422" class="bs">↻ Restart</text>
+<text x="1560" y="447" class="bs">Resume chat</text>
+<path d="M415 435 H455 M715 435 H755 M935 435 H975" class="fp dash"/>
+
+<!-- retrieval -->
+<rect x="22" y="565" width="1756" height="245" rx="22" fill="#fbfcfd" stroke="#a8b8c8"/>
+<text x="48" y="598" class="section">Pinecone Retrieval + CrossEncoder Reranking</text>
+
+<rect x="55" y="620" width="790" height="155" rx="18" fill="url(#green)" stroke="#72c79d"/>
+<rect x="55" y="620" width="145" height="155" rx="18" fill="#059669"/>
+<text x="80" y="660" class="lane">Focused</text>
+<text x="80" y="684" class="lane">Question</text>
+<text x="80" y="712" font-family="Arial" font-size="12" fill="#dff9ed">precision path</text>
+
+<rect x="225" y="642" width="145" height="108" class="boxG"/>
+<text x="297" y="674" text-anchor="middle" class="bt">Pinecone Top 8</text>
+<text x="297" y="697" text-anchor="middle" class="bs">cosine similarity</text>
+
+<rect x="400" y="642" width="145" height="108" class="boxG"/>
+<text x="472" y="674" text-anchor="middle" class="bt">Neighbor ±1</text>
+<text x="472" y="697" text-anchor="middle" class="bs">same course only</text>
+
+<rect x="575" y="642" width="150" height="108" class="boxG"/>
+<circle cx="615" cy="675" r="18" fill="#FFD21E"/>
+<text x="615" y="681" text-anchor="middle" font-family="Arial" font-size="10" font-weight="700" fill="#111827">HF</text>
+<text x="660" y="674" class="bt">CrossEncoder</text>
+<text x="660" y="697" class="bs">reranking</text>
+
+<rect x="750" y="642" width="75" height="108" class="boxG"/>
+<text x="787" y="680" text-anchor="middle" class="bt">Best 3</text>
+
+<path d="M370 696 H400 M545 696 H575 M725 696 H750" class="fg"/>
+
+<rect x="875" y="620" width="865" height="155" rx="18" fill="url(#blue)" stroke="#7aaee3"/>
+<rect x="875" y="620" width="145" height="155" rx="18" fill="#2563eb"/>
+<text x="900" y="660" class="lane">Broad</text>
+<text x="900" y="684" class="lane">Question</text>
+<text x="900" y="712" font-family="Arial" font-size="12" fill="#e8f3ff">coverage path</text>
+
+<rect x="1045" y="642" width="170" height="108" class="box"/>
+<text x="1130" y="670" text-anchor="middle" class="bt">Pinecone Filter</text>
+<text x="1130" y="692" text-anchor="middle" class="bs">course metadata</text>
+<text x="1130" y="711" text-anchor="middle" class="bs">Top 4 / course</text>
+
+<rect x="1245" y="642" width="130" height="108" class="box"/>
+<text x="1310" y="674" text-anchor="middle" class="bt">Neighbor ±1</text>
+<text x="1310" y="697" text-anchor="middle" class="bs">same course</text>
+
+<rect x="1405" y="642" width="135" height="108" class="box"/>
+<text x="1472" y="674" text-anchor="middle" class="bt">CrossEncoder</text>
+<text x="1472" y="697" text-anchor="middle" class="bs">Best 2/course</text>
+
+<rect x="1570" y="642" width="145" height="108" class="box"/>
+<text x="1642" y="670" text-anchor="middle" class="bt">Relevance Gate</text>
+<text x="1642" y="693" text-anchor="middle" class="bs">remove false positives</text>
+
+<path d="M1215 696 H1245 M1375 696 H1405 M1540 696 H1570" class="fb"/>
+<path d="M1050 495 V575 H472 V642" class="fg"/>
+<path d="M1050 495 V575 H1310 V642" class="fb"/>
+
+<!-- generation -->
+<rect x="22" y="835" width="1756" height="190" rx="22" fill="url(#orange)" stroke="#f2b56e"/>
+<rect x="22" y="835" width="245" height="190" rx="22" fill="#ea580c"/>
+<text x="48" y="877" class="lane">Grounded Generation</text>
+<text x="48" y="901" class="lane">&amp; Persistent Save</text>
+<text x="48" y="930" font-family="Arial" font-size="12.5" font-style="italic" fill="#fff3e8">both paths merge</text>
+
+<rect x="310" y="872" width="160" height="115" class="boxO"/>
+<circle cx="350" cy="904" r="19" fill="#111827"/>
+<text x="350" y="910" text-anchor="middle" font-family="Arial" font-size="10" font-weight="700" fill="#fff">LLM</text>
+<text x="395" y="902" class="bt">Ollama</text>
+<text x="395" y="923" class="bs">qwen3:4b-instruct</text>
+<text x="395" y="944" class="bs">grounded generation</text>
+
+<rect x="505" y="872" width="165" height="115" class="boxO"/>
+<text x="587" y="913" text-anchor="middle" class="bt">[SOURCE N]</text>
+<text x="587" y="935" text-anchor="middle" class="bs">neutral markers</text>
+
+<rect x="705" y="872" width="180" height="115" class="boxO"/>
+<circle cx="745" cy="904" r="18" fill="#3776AB"/>
+<text x="745" y="910" text-anchor="middle" font-family="Arial" font-size="11" font-weight="700" fill="#fff">Py</text>
+<text x="790" y="902" class="bt">Trusted Citations</text>
+<text x="790" y="923" class="bs">course + PDF page</text>
+<text x="790" y="944" class="bs">dedupe + refusal cleanup</text>
+
+<rect x="920" y="872" width="180" height="115" class="boxO"/>
+<path d="M960 896 L978 923 L942 923 Z" fill="#FF4B4B"/>
+<text x="1005" y="902" class="bt">Final Answer</text>
+<text x="1005" y="923" class="bs">Streamlit response</text>
+<text x="1005" y="944" class="bs">retrieved sources</text>
+
+<rect x="1135" y="872" width="210" height="115" class="boxP"/>
+<ellipse cx="1175" cy="902" rx="18" ry="8" fill="#0f766e"/>
+<rect x="1157" y="902" width="36" height="18" fill="#0f766e"/>
+<ellipse cx="1175" cy="920" rx="18" ry="8" fill="#115e59"/>
+<text x="1220" y="902" class="bt">Save to SQLite</text>
+<text x="1220" y="923" class="bs">user + assistant</text>
+<text x="1220" y="944" class="bs">sources + query metadata</text>
+
+<rect x="1380" y="862" width="320" height="135" rx="16" fill="#fff" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="1410" y="892" class="bt">Observed V11 Validation</text>
+<text x="1410" y="918" class="bs">Pinecone DB test: 14/14 PASS</text>
+<text x="1410" y="941" class="bs">RAG regression: 12/12 PASS</text>
+<text x="1410" y="964" class="bs">SQLite memory: 18/18 PASS</text>
+<text x="1410" y="987" class="bs">Streamlit browser: PASS</text>
+
+<path d="M470 930 H505 M670 930 H705 M885 930 H920 M1100 930 H1135 M1345 930 H1380" class="fo dash"/>
+<path d="M787 750 V850 H390 V872" class="fo"/>
+<path d="M1642 750 V850 H390 V872" class="fo"/>
+
+<!-- animation -->
+<circle r="7" fill="#2563eb" filter="url(#glow)" opacity="0">
+  <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.92;1" dur="5s" begin="0s" fill="freeze"/>
+  <animateMotion dur="5s" begin="0s" repeatCount="1"><mpath href="#indexPath"/></animateMotion>
+</circle>
+<circle r="8" fill="#7c3aed" filter="url(#glow)">
+  <animateMotion dur="10s" repeatCount="indefinite"><mpath href="#runtimePath"/></animateMotion>
+</circle>
+
+<!-- footer -->
+<line x1="42" y1="1048" x2="1758" y2="1048" stroke="#dbe4ee"/>
+<text x="48" y="1075" class="small">Vector DB: Pinecone</text>
+<text x="230" y="1075" class="small">Embeddings: MiniLM</text>
+<text x="430" y="1075" class="small">Reranker: CrossEncoder</text>
+<text x="670" y="1075" class="small">LLM: Ollama</text>
+<text x="820" y="1075" class="small">Memory: SQLite</text>
+<text x="980" y="1075" class="small">UI: Streamlit</text>
+<text x="1120" y="1075" class="small">Private PDF remains local</text>
+<text x="1410" y="1075" class="small">V11 milestone: COMPLETE</text>
+</svg>
