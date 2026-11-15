@@ -42,7 +42,30 @@ This lets the system distinguish documents that discuss similar cloud concepts a
 
 ### Stage 1 — Multi-document ingestion
 
-Status: implementation ready for local validation.
+Status: COMPLETE.
+
+Observed Jupyter validation:
+
+~~~text
+Documents: 27
+Pages: 3451
+Chunks: 11502
+Tests passed: 17/17
+Accuracy: 100.0%
+V12 STAGE 1 MULTI-DOCUMENT INGESTION: PASS
+~~~
+
+Observed provider distribution:
+
+~~~text
+AWS      | PDFs: 8 | Pages: 2324 | Chunks: 7437
+Azure    | PDFs: 5 | Pages: 174  | Chunks: 790
+GCP      | PDFs: 5 | Pages: 71   | Chunks: 232
+Oracle   | PDFs: 4 | Pages: 116  | Chunks: 492
+IBM      | PDFs: 5 | Pages: 766  | Chunks: 2551
+~~~
+
+One corpus-quality anomaly was observed: GCP_Enterprise_Foundations_Blueprint.pdf produced only 1 chunk. The file is still represented correctly in the corpus, but its content quality should be reviewed during later retrieval validation.
 
 ~~~text
 data/cloud_documents/
@@ -166,7 +189,7 @@ V12 is in progress.
 
 Do not mark it complete until:
 
-1. multi-document ingestion passes;
+1. multi-document ingestion passes — COMPLETE (17/17);
 2. Pinecone multi-document indexing passes;
 3. provider/document filtering passes;
 4. retrieval and reranking pass;
