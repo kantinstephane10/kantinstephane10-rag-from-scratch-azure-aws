@@ -1,11 +1,12 @@
 [project]
 name = "rag-from-scratch-azure-aws"
 version = "0.3.0"
-description = "Local RAG with PDF ingestion, MiniLM embeddings, ChromaDB, neighbor expansion, reranking, Ollama, evaluation, and Streamlit."
+description = "RAG with PDF ingestion, MiniLM embeddings, Pinecone, neighbor expansion, reranking, Ollama, persistent memory, evaluation, and Streamlit."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "chromadb",
+    "pinecone>=10.3,<11",
+    "certifi>=2026.10.19",
     "langchain-community",
     "langchain-text-splitters",
     "langchain-ollama",
