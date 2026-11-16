@@ -69,6 +69,12 @@ Validated:
 - restored metadata
 - document-safe neighbors
 
+## Pinecone dashboard visual proof
+
+The captured Pinecone dashboard confirms the V12 production index `multicloud-rag-v12`, the `cloud-documents` namespace, and a record count of **11,502**.
+
+![Pinecone V12 index proof](v12-pinecone-index-proof.jpg)
+
 ## Stage 3 — Multi-document retrieval + reranking
 
 Observed result:
