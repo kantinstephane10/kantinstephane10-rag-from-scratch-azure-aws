@@ -16,6 +16,7 @@ data/memory/
 *.db-shm
 *.db-wal
 
-# Keep private source documents out of GitHub.
+# Private/local source documents
 *.pdf
+data/text_files/pdf/
 data/text_files/pdf/*
