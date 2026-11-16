@@ -178,6 +178,19 @@ The V12 Pinecone dashboard below shows the production `multicloud-rag-v12` index
   />
 </p>
 
+
+## Pinecone index visual proof
+
+The V12 Pinecone index contains **11,502 records** in the `cloud-documents` namespace.
+
+<p align="center">
+  <img
+    src="docs/results/v12-pinecone-index-proof.jpg"
+    alt="Pinecone multicloud-rag-v12 index showing 11,502 records"
+    width="100%"
+  />
+</p>
+
 ## V12 measured proof
 
 All PASS results below are observed runtime results.
