@@ -288,3 +288,40 @@ Validated behaviors:
 - low-information comparison evidence filtered out
 - no raw SOURCE markers remain in final answers
 - final citations map only to retrieved evidence
+
+
+### Stage 5A — Jupyter Streamlit backend + persistent memory
+
+Status: COMPLETE.
+
+Observed Jupyter validation:
+
+~~~text
+Pinecone index: multicloud-rag-v12
+Documents: 27
+Pages: 3451
+Chunks: 11502
+Persistent messages: 4
+Question 1 query type: provider:AWS
+Follow-up query type: cross_provider
+Follow-up standalone question:
+How does Azure compare with AWS's reliability recommendations for building reliable cloud workloads?
+Follow-up cited providers: ['AWS', 'Azure']
+Tests passed: 40/40
+Accuracy: 100.0%
+V12 STAGE 5A JUPYTER STREAMLIT BACKEND + PERSISTENT MEMORY: PASS
+~~~
+
+Validated behaviors:
+
+- existing V10 SQLite memory reused
+- persistent conversations
+- automatic conversation titles
+- recent 12-message memory window
+- follow-up question rewriting
+- provider-specific retrieval
+- AWS + Azure cross-provider retrieval
+- grounded answer generation
+- deterministic citations
+- persisted source evidence
+- restart persistence
