@@ -325,3 +325,44 @@ Validated behaviors:
 - deterministic citations
 - persisted source evidence
 - restart persistence
+
+
+### Stage 5B — Production Streamlit UI
+
+Status: COMPLETE.
+
+Observed browser validation:
+
+~~~text
+V12 production Streamlit application launched successfully from the repository code.
+
+Browser validation: PASS
+User confirmed: "it worked perfectly"
+~~~
+
+Validated production behaviors:
+
+- repository version of `src/rag_v12_pipeline.py`
+- repository version of `src/streamlit_app.py`
+- Streamlit application starts successfully
+- V12 Pinecone backend loads successfully
+- provider-aware retrieval works in the UI
+- conversational follow-up memory works
+- grounded answers and deterministic citations render correctly
+- persistent SQLite conversation history works
+- production UI is usable end-to-end
+
+### V12 Final Status
+
+Status: COMPLETE.
+
+~~~text
+Stage 1 — Multi-document ingestion:              17/17 PASS
+Stage 2 — Pinecone multi-document index:         22/22 PASS
+Stage 3 — Retrieval + reranking:                  27/27 PASS
+Stage 4 — Grounded answers + citations:           52/52 PASS
+Stage 5A — Jupyter memory/UI backend validation:  40/40 PASS
+Stage 5B — Streamlit browser validation:          PASS
+
+RAG V12 — MULTI-DOCUMENT MULTI-CLOUD RAG: COMPLETE
+~~~
