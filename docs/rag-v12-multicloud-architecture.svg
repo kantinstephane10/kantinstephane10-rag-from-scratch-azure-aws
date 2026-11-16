@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120">
+  <defs>
+    <style>
+      .bg { fill:#f7f9fc; }
+      .title { font:700 34px Arial,sans-serif; fill:#0f172a; }
+      .subtitle { font:400 17px Arial,sans-serif; fill:#475569; }
+      .section { font:700 18px Arial,sans-serif; fill:#0f172a; }
+      .label { font:700 16px Arial,sans-serif; fill:#0f172a; }
+      .body { font:400 14px Arial,sans-serif; fill:#334155; }
+      .small { font:400 12px Arial,sans-serif; fill:#475569; }
+      .box { fill:#ffffff; stroke:#cbd5e1; stroke-width:2; rx:16; }
+      .aws { fill:#fff7ed; stroke:#f59e0b; stroke-width:2; rx:14; }
+      .azure { fill:#eff6ff; stroke:#3b82f6; stroke-width:2; rx:14; }
+      .gcp { fill:#f0fdf4; stroke:#22c55e; stroke-width:2; rx:14; }
+      .oracle { fill:#fef2f2; stroke:#ef4444; stroke-width:2; rx:14; }
+      .ibm { fill:#f5f3ff; stroke:#8b5cf6; stroke-width:2; rx:14; }
+      .core { fill:#eef2ff; stroke:#6366f1; stroke-width:2.3; rx:16; }
+      .store { fill:#ecfeff; stroke:#06b6d4; stroke-width:2.3; rx:16; }
+      .gen { fill:#fdf4ff; stroke:#d946ef; stroke-width:2.3; rx:16; }
+      .ui { fill:#ecfdf5; stroke:#10b981; stroke-width:2.3; rx:16; }
+      .metric { fill:#0f172a; rx:12; }
+      .metricText { font:700 15px Arial,sans-serif; fill:#ffffff; }
+      .arrow { stroke:#64748b; stroke-width:3; fill:none; marker-end:url(#arrowhead); }
+      .dash { stroke:#94a3b8; stroke-width:2; stroke-dasharray:8 7; fill:none; marker-end:url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1800" height="1120"/>
+  <text class="title" x="70" y="62">RAG V12 — Multi-Document Multi-Cloud Architecture</text>
+  <text class="subtitle" x="70" y="94">AWS + Azure + GCP + Oracle + IBM • Pinecone • CrossEncoder • Ollama • SQLite • Streamlit</text>
+
+  <!-- Corpus -->
+  <text class="section" x="70" y="145">1. Multi-cloud source corpus</text>
+  <rect class="aws" x="70" y="165" width="270" height="95"/>
+  <text class="label" x="95" y="198">AWS</text><text class="body" x="95" y="226">8 PDFs • 2,324 pages</text><text class="body" x="95" y="247">7,437 chunks</text>
+  <rect class="azure" x="365" y="165" width="270" height="95"/>
+  <text class="label" x="390" y="198">Azure</text><text class="body" x="390" y="226">5 PDFs • 174 pages</text><text class="body" x="390" y="247">790 chunks</text>
+  <rect class="gcp" x="660" y="165" width="270" height="95"/>
+  <text class="label" x="685" y="198">GCP</text><text class="body" x="685" y="226">5 PDFs • 71 pages</text><text class="body" x="685" y="247">232 chunks</text>
+  <rect class="oracle" x="955" y="165" width="270" height="95"/>
+  <text class="label" x="980" y="198">Oracle / OCI</text><text class="body" x="980" y="226">4 PDFs • 116 pages</text><text class="body" x="980" y="247">492 chunks</text>
+  <rect class="ibm" x="1250" y="165" width="270" height="95"/>
+  <text class="label" x="1275" y="198">IBM</text><text class="body" x="1275" y="226">5 PDFs • 766 pages</text><text class="body" x="1275" y="247">2,551 chunks</text>
+
+  <!-- Ingestion -->
+  <path class="arrow" d="M795 260 L795 310"/>
+  <rect class="core" x="470" y="315" width="650" height="130"/>
+  <text class="label" x="500" y="350">2. Document-safe ingestion</text>
+  <text class="body" x="500" y="380">PyMuPDF → generic cleaning → RecursiveCharacterTextSplitter (800 / 120)</text>
+  <text class="body" x="500" y="407">Metadata: provider • document_id • document_title • source • pdf_page • document_chunk_number • chunk_id</text>
+  <text class="small" x="500" y="430">Critical invariant: neighbor lookup key = (document_id, document_chunk_number), never a global-only chunk number.</text>
+
+  <!-- Embeddings / Pinecone -->
+  <path class="arrow" d="M795 445 L795 495"/>
+  <rect class="store" x="470" y="500" width="650" height="120"/>
+  <text class="label" x="500" y="535">3. Dense vector index</text>
+  <text class="body" x="500" y="564">SentenceTransformers all-MiniLM-L6-v2 → normalized 384-d embeddings</text>
+  <text class="body" x="500" y="590">Pinecone index: multicloud-rag-v12 • namespace: cloud-documents • cosine similarity</text>
+
+  <!-- Retrieval -->
+  <path class="arrow" d="M795 620 L795 670"/>
+  <rect class="core" x="120" y="675" width="420" height="150"/>
+  <text class="label" x="150" y="710">4A. Retrieval modes</text>
+  <text class="body" x="150" y="739">• Global multi-cloud</text>
+  <text class="body" x="150" y="764">• Provider-specific</text>
+  <text class="body" x="150" y="789">• Specific document</text>
+  <text class="body" x="150" y="814">• Cross-provider comparison</text>
+
+  <rect class="core" x="690" y="675" width="420" height="150"/>
+  <text class="label" x="720" y="710">4B. Candidate improvement</text>
+  <text class="body" x="720" y="739">Top semantic candidates</text>
+  <text class="body" x="720" y="764">→ same-PDF ±1 neighbors</text>
+  <text class="body" x="720" y="789">→ deduplicate / remove weak evidence</text>
+  <text class="body" x="720" y="814">→ CrossEncoder ms-marco-MiniLM-L6-v2</text>
+
+  <rect class="gen" x="1260" y="675" width="420" height="150"/>
+  <text class="label" x="1290" y="710">4C. Grounded generation</text>
+  <text class="body" x="1290" y="739">Ollama qwen3:4b-instruct</text>
+  <text class="body" x="1290" y="764">Neutral [SOURCE N] markers</text>
+  <text class="body" x="1290" y="789">Strict source/provider validation</text>
+  <text class="body" x="1290" y="814">Python creates trusted document/page citations</text>
+
+  <path class="arrow" d="M540 750 L680 750"/>
+  <path class="arrow" d="M1110 750 L1250 750"/>
+
+  <!-- Memory / UI -->
+  <path class="arrow" d="M1470 825 L1470 880"/>
+  <rect class="ui" x="1110" y="885" width="570" height="145"/>
+  <text class="label" x="1140" y="920">5. Production Streamlit experience</text>
+  <text class="body" x="1140" y="949">Provider/document selectors • comparison mode • evidence expanders</text>
+  <text class="body" x="1140" y="976">Deterministic citations • source scores • persistent conversations</text>
+  <text class="body" x="1140" y="1003">Browser validation: PASS</text>
+
+  <rect class="store" x="120" y="885" width="570" height="145"/>
+  <text class="label" x="150" y="920">Persistent conversational memory</text>
+  <text class="body" x="150" y="949">SQLite rag_v10_memory.db</text>
+  <text class="body" x="150" y="976">Recent 12-message window → follow-up rewrite → standalone retrieval question</text>
+  <text class="body" x="150" y="1003">Stores query type, standalone question, answer, and retrieved evidence</text>
+
+  <path class="dash" d="M690 955 L1100 955"/>
+
+  <!-- Metrics -->
+  <rect class="metric" x="70" y="1060" width="1660" height="42"/>
+  <text class="metricText" x="95" y="1087">PROOF: 27 PDFs • 3,451 pages • 11,502 chunks • Stage 1: 17/17 • Stage 2: 22/22 • Stage 3: 27/27 • Stage 4: 52/52 • Stage 5A: 40/40 • UI: PASS</text>
+</svg>
