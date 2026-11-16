@@ -166,6 +166,18 @@ The UI supports:
 - persistent conversations;
 - rename, clear, and delete conversation controls.
 
+## Pinecone visual proof
+
+The V12 Pinecone dashboard below shows the production `multicloud-rag-v12` index with **11,502 records** in the `cloud-documents` namespace.
+
+<p align="center">
+  <img
+    src="docs/results/v12-pinecone-index-proof.jpg"
+    alt="Pinecone V12 multicloud-rag-v12 index showing 11,502 records"
+    width="100%"
+  />
+</p>
+
 ## V12 measured proof
 
 All PASS results below are observed runtime results.
