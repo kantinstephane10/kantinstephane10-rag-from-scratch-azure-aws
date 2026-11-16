@@ -249,3 +249,42 @@ Validated behaviors:
 - duplicate removal
 - CrossEncoder reranking
 - citation-ready provider/document/page metadata
+
+
+### Stage 4 — Grounded answers + deterministic citations
+
+Status: COMPLETE.
+
+Observed Jupyter validation:
+
+~~~text
+Pinecone index: multicloud-rag-v12
+Documents: 27
+Pages: 3451
+Chunks: 11502
+Embedding model: sentence-transformers/all-MiniLM-L6-v2
+Reranker: cross-encoder/ms-marco-MiniLM-L6-v2
+LLM: qwen3:4b-instruct
+Global attempts: 1
+AWS attempts: 1
+Document attempts: 1
+Comparison attempts: 1
+Comparison cited providers: ['AWS', 'Azure']
+Tests passed: 52/52
+Accuracy: 100.0%
+V12 STAGE 4 GROUNDED ANSWERS + DETERMINISTIC CITATIONS: PASS
+~~~
+
+Validated behaviors:
+
+- grounded Ollama answers
+- deterministic provider/document/PDF-page citations
+- strict SOURCE-number validation
+- invalid SOURCE detection
+- same-document citation integrity
+- cross-provider evidence balancing
+- AWS + Azure comparison answering
+- comparison citations include both requested providers
+- low-information comparison evidence filtered out
+- no raw SOURCE markers remain in final answers
+- final citations map only to retrieved evidence
