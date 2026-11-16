@@ -1,188 +1,69 @@
-# RAG V12 — Multi-Document RAG
+# RAG V12 — Multi-Document Multi-Cloud RAG
 
 ## Goal
 
-Extend the validated V11 Pinecone RAG system from one source PDF to a large multi-document cloud corpus.
+Extend the validated V11 Pinecone RAG system from a single source PDF into a document-safe, multi-provider RAG application spanning AWS, Azure, GCP, Oracle, and IBM.
 
-Local V12 corpus:
+## Architecture
 
-- AWS: 8 PDFs
-- Azure: 5 PDFs
-- GCP: 5 PDFs
-- Oracle: 4 PDFs
-- IBM: 5 PDFs
-- Total: 27 PDFs
-- Downloaded corpus size: 107.22 MB
+![RAG V12 Multi-Cloud Architecture](rag-v12-multicloud-architecture.svg)
 
-The PDFs remain local and are protected by the repository PDF ignore rule.
+Dedicated validation evidence: [docs/results/v12-validation.md](results/v12-validation.md)
 
----
+## Final corpus
 
-## Why V12 matters
+| Provider | PDFs | Pages | Chunks |
+| --- | ---: | ---: | ---: |
+| AWS | 8 | 2,324 | 7,437 |
+| Azure | 5 | 174 | 790 |
+| GCP | 5 | 71 | 232 |
+| Oracle | 4 | 116 | 492 |
+| IBM | 5 | 766 | 2,551 |
+| **Total** | **27** | **3,451** | **11,502** |
 
-A single-document RAG system can assume that neighboring chunks belong to the same source.
+The heavy PDFs remain local and are excluded from Git by the repository PDF ignore rules.
 
-A multi-document RAG system cannot make that assumption.
-
-V12 therefore introduces explicit document identity:
-
-- provider
-- document_id
-- document_title
-- source
-- pdf_page
-- document_chunk_number
-- chunk_id
-
-This lets the system distinguish documents that discuss similar cloud concepts and prevents retrieval logic from crossing document boundaries accidentally.
-
----
-
-## V12 build sequence
-
-### Stage 1 — Multi-document ingestion
-
-Status: COMPLETE.
-
-Observed Jupyter validation:
+## Architecture flow
 
 ~~~text
-Documents: 27
-Pages: 3451
-Chunks: 11502
-Tests passed: 17/17
-Accuracy: 100.0%
-V12 STAGE 1 MULTI-DOCUMENT INGESTION: PASS
+AWS / Azure / GCP / Oracle / IBM PDFs
+                    ↓
+                 PyMuPDF
+                    ↓
+              Text cleaning
+                    ↓
+Provider + document + PDF-page metadata
+                    ↓
+RecursiveCharacterTextSplitter (800 / 120)
+                    ↓
+Document-safe chunk IDs and neighbor lookup
+                    ↓
+MiniLM normalized 384-d embeddings
+                    ↓
+Pinecone: multicloud-rag-v12 / cloud-documents
+                    ↓
+Global / provider / document / cross-provider retrieval
+                    ↓
+Same-PDF neighbor expansion
+                    ↓
+Deduplication + weak-evidence filtering
+                    ↓
+CrossEncoder reranking
+                    ↓
+Ollama qwen3:4b-instruct
+                    ↓
+[SOURCE N] validation
+                    ↓
+Python deterministic provider/document/page citations
+                    ↓
+SQLite persistent conversational memory
+                    ↓
+Streamlit production UI
 ~~~
 
-Observed provider distribution:
+## Core design decisions
 
-~~~text
-AWS      | PDFs: 8 | Pages: 2324 | Chunks: 7437
-Azure    | PDFs: 5 | Pages: 174  | Chunks: 790
-GCP      | PDFs: 5 | Pages: 71   | Chunks: 232
-Oracle   | PDFs: 4 | Pages: 116  | Chunks: 492
-IBM      | PDFs: 5 | Pages: 766  | Chunks: 2551
-~~~
-
-One corpus-quality anomaly was observed: GCP_Enterprise_Foundations_Blueprint.pdf produced only 1 chunk. The file is still represented correctly in the corpus, but its content quality should be reviewed during later retrieval validation.
-
-~~~text
-data/cloud_documents/
-├── AWS/
-├── Azure/
-├── GCP/
-├── Oracle/
-└── IBM/
-        ↓
-recursive PDF discovery
-        ↓
-PyMuPDF
-        ↓
-generic text cleaning
-        ↓
-provider/document/page metadata
-        ↓
-RecursiveCharacterTextSplitter
-        ↓
-document-safe chunk IDs
-        ↓
-document-safe neighbor lookup
-~~~
-
-Notebook-first validation:
-
-- notebooks/v12_multi_document_rag_stage1.ipynb
-
-The notebook contains the complete Stage 1 implementation in one code cell:
-PDF discovery, loading, cleaning, metadata, chunking, document-safe neighbors, and all validation tests.
-
-Run the notebook first and confirm all 17/17 tests pass.
-
-Only after the notebook passes do we move the validated logic into the Python files:
-
-- src/rag_v12_multidoc.py
-- src/rag_v12_multidoc_test.py
-
-CLI validation after notebook validation:
-
-~~~powershell
-uv run python src/rag_v12_multidoc_test.py
-~~~
-
-Stage 1 must pass in Jupyter before Pinecone indexing is added.
-
----
-
-### Stage 2 — Pinecone multi-document index
-
-Status: COMPLETE.
-
-Observed Jupyter validation:
-
-~~~text
-Index: multicloud-rag-v12
-Namespace: cloud-documents
-Documents: 27
-Pages: 3451
-Chunks: 11502
-Embedding shape: (11502, 384)
-Tests passed: 22/22
-Accuracy: 100.0%
-V12 STAGE 2 PINECONE MULTI-DOCUMENT INDEX: PASS
-~~~
-
-Validated behaviors:
-
-- Pinecone API connectivity
-- 384-dimensional MiniLM embeddings
-- cosine vector metric
-- 11,502 persisted Pinecone records
-- global multi-document semantic retrieval
-- provider filters for AWS, Azure, GCP, Oracle, and IBM
-- document-specific filtering
-- restored provider/document/page metadata
-- document-safe neighbor expansion
-
-### Stage 3 — Multi-document retrieval
-
-Planned:
-
-- focused retrieval across the corpus;
-- provider-specific questions;
-- one-document questions;
-- cross-document questions;
-- cross-provider questions;
-- CrossEncoder reranking across documents.
-
----
-
-### Stage 4 — Document-aware citations
-
-Planned citation shape:
-
-~~~text
-[AWS | AWS Security Reference Architecture | PDF page 42]
-~~~
-
-The model will still emit neutral [SOURCE N] markers and Python will construct citations from trusted metadata.
-
----
-
-### Stage 5 — Streamlit
-
-Planned:
-
-- V12 labeling;
-- show provider;
-- show source document;
-- show PDF page;
-- show document-aware retrieved evidence;
-- preserve V10 SQLite conversation memory.
-
----
-
-## Important design decision
+### 1. Document-safe neighbors
 
 Neighbor expansion is keyed by:
 
@@ -190,171 +71,95 @@ Neighbor expansion is keyed by:
 (document_id, document_chunk_number)
 ~~~
 
-not by one global chunk number.
+A single global chunk number is not sufficient in a multi-document corpus because the final chunk of one PDF must never pull the first chunk of another PDF.
 
-This prevents an AWS document's final chunk from pulling the first chunk of a different AWS, Azure, GCP, Oracle, or IBM document.
+### 2. Trusted citations are built in Python
 
-That is a core correctness requirement for multi-document RAG.
-
----
-
-## V12 status
-
-V12 is in progress.
-
-Do not mark it complete until:
-
-1. multi-document ingestion passes — COMPLETE (17/17);
-2. Pinecone multi-document indexing passes;
-3. provider/document filtering passes;
-4. retrieval and reranking pass;
-5. document-aware citations pass;
-6. V9/V10 regressions remain healthy where applicable;
-7. Streamlit browser validation passes.
-
-
-### Stage 3 — Multi-document retrieval + reranking
-
-Status: COMPLETE.
-
-Observed Jupyter validation:
+The LLM emits neutral markers such as:
 
 ~~~text
-Pinecone index: multicloud-rag-v12
-Documents: 27
-Pages: 3451
-Chunks: 11502
-Embedding model: sentence-transformers/all-MiniLM-L6-v2
-Reranker: cross-encoder/ms-marco-MiniLM-L6-v2
-Semantic Top K: 8
-Neighbor range: 1
-Final Top K: 5
-Tests passed: 27/27
-Accuracy: 100.0%
-V12 STAGE 3 MULTI-DOCUMENT RETRIEVAL + RERANKING: PASS
+[SOURCE 2]
 ~~~
 
-Validated behaviors:
-
-- global multi-cloud retrieval
-- AWS provider retrieval
-- Azure provider retrieval
-- GCP provider retrieval
-- Oracle provider retrieval
-- IBM provider retrieval
-- specific-document retrieval
-- cross-provider retrieval
-- cross-document retrieval
-- document-safe neighbor expansion
-- duplicate removal
-- CrossEncoder reranking
-- citation-ready provider/document/page metadata
-
-
-### Stage 4 — Grounded answers + deterministic citations
-
-Status: COMPLETE.
-
-Observed Jupyter validation:
+Python maps those markers back to retrieved metadata and emits citations such as:
 
 ~~~text
-Pinecone index: multicloud-rag-v12
-Documents: 27
-Pages: 3451
-Chunks: 11502
-Embedding model: sentence-transformers/all-MiniLM-L6-v2
-Reranker: cross-encoder/ms-marco-MiniLM-L6-v2
-LLM: qwen3:4b-instruct
-Global attempts: 1
-AWS attempts: 1
-Document attempts: 1
-Comparison attempts: 1
-Comparison cited providers: ['AWS', 'Azure']
-Tests passed: 52/52
-Accuracy: 100.0%
-V12 STAGE 4 GROUNDED ANSWERS + DETERMINISTIC CITATIONS: PASS
+[AWS | AWS Security Pillar | PDF page 8]
 ~~~
 
-Validated behaviors:
+This prevents the LLM from inventing provider names, document titles, or page numbers.
 
-- grounded Ollama answers
-- deterministic provider/document/PDF-page citations
-- strict SOURCE-number validation
-- invalid SOURCE detection
-- same-document citation integrity
-- cross-provider evidence balancing
-- AWS + Azure comparison answering
-- comparison citations include both requested providers
-- low-information comparison evidence filtered out
-- no raw SOURCE markers remain in final answers
-- final citations map only to retrieved evidence
+### 3. Cross-provider retrieval is balanced
 
+Comparison questions retrieve evidence separately for each requested provider. This prevents the provider with the larger corpus from dominating all candidates.
 
-### Stage 5A — Jupyter Streamlit backend + persistent memory
+### 4. CrossEncoder reranking follows Pinecone retrieval
 
-Status: COMPLETE.
+Pinecone performs fast dense semantic candidate retrieval. A CrossEncoder then reads the question and each candidate together and reorders the evidence before generation.
 
-Observed Jupyter validation:
+### 5. Existing SQLite memory is reused
 
-~~~text
-Pinecone index: multicloud-rag-v12
-Documents: 27
-Pages: 3451
-Chunks: 11502
-Persistent messages: 4
-Question 1 query type: provider:AWS
-Follow-up query type: cross_provider
-Follow-up standalone question:
-How does Azure compare with AWS's reliability recommendations for building reliable cloud workloads?
-Follow-up cited providers: ['AWS', 'Azure']
-Tests passed: 40/40
-Accuracy: 100.0%
-V12 STAGE 5A JUPYTER STREAMLIT BACKEND + PERSISTENT MEMORY: PASS
-~~~
+V12 keeps the validated V10 persistent SQLite conversation model instead of creating a second memory system. Recent conversation history is used to rewrite follow-ups into standalone retrieval questions.
 
-Validated behaviors:
+## Challenges encountered and how they were solved
 
-- existing V10 SQLite memory reused
-- persistent conversations
-- automatic conversation titles
-- recent 12-message memory window
-- follow-up question rewriting
-- provider-specific retrieval
-- AWS + Azure cross-provider retrieval
-- grounded answer generation
-- deterministic citations
-- persisted source evidence
-- restart persistence
+### Challenge 1 — Scaling from one PDF to 27 heterogeneous PDFs
 
+The corpus expanded to 27 PDFs, 3,451 pages, and 11,502 chunks with very uneven provider sizes. AWS alone contributed 7,437 chunks while GCP contributed 232.
 
-### Stage 5B — Production Streamlit UI
+**Resolution:** attach explicit provider and document identity to every page/chunk and preserve that metadata through Pinecone retrieval.
 
-Status: COMPLETE.
+### Challenge 2 — Neighbor expansion could cross document boundaries
 
-Observed browser validation:
+The previous single-document design could safely reason about adjacent chunk numbers. That assumption became unsafe with many PDFs.
 
-~~~text
-V12 production Streamlit application launched successfully from the repository code.
+**Resolution:** use the composite lookup key `(document_id, document_chunk_number)`. Stage 1 and Stage 3 explicitly validated that neighbor expansion never crosses a PDF boundary.
 
-Browser validation: PASS
-User confirmed: "it worked perfectly"
-~~~
+### Challenge 3 — One GCP source produced only one chunk
 
-Validated production behaviors:
+`GCP_Enterprise_Foundations_Blueprint.pdf` produced only one chunk, revealing a source-quality/parsing anomaly.
 
-- repository version of `src/rag_v12_pipeline.py`
-- repository version of `src/streamlit_app.py`
-- Streamlit application starts successfully
-- V12 Pinecone backend loads successfully
-- provider-aware retrieval works in the UI
-- conversational follow-up memory works
-- grounded answers and deterministic citations render correctly
-- persistent SQLite conversation history works
-- production UI is usable end-to-end
+**Resolution:** keep the document represented rather than silently dropping it, record the anomaly, and rely on later retrieval validation to reveal whether it harms answers.
 
-### V12 Final Status
+### Challenge 4 — Jupyter kernel and Pinecone dependency mismatch
 
-Status: COMPLETE.
+The active notebook kernel used the workspace `.venv`, while the repository had its own environment. Standard `python -m pip` failed because the workspace environment was uv-managed and did not expose pip in the expected way.
+
+**Resolution:** install into the exact Jupyter interpreter with `uv pip install --python <interpreter>`, then validate the Pinecone SDK in the notebook before continuing.
+
+### Challenge 5 — Weak title-only evidence in cross-provider comparison
+
+Early AWS/Azure comparison retrieval returned Azure chunks that contained little more than a document title. The LLM correctly refused because the evidence was not strong enough.
+
+**Resolution:** increase provider-specific candidate retrieval, filter low-information chunks, and rerank each provider independently before combining comparison evidence.
+
+### Challenge 6 — LLM could emit an invalid SOURCE number
+
+A comparison could have four evidence blocks while the model emitted something such as `[SOURCE 5]`.
+
+**Resolution:** tell the model the exact allowed source range, validate every SOURCE number in Python, and retry generation when invalid markers are detected.
+
+### Challenge 7 — Cross-provider answers needed provider coverage validation
+
+A syntactically valid answer could cite only AWS even when the user explicitly asked for AWS versus Azure.
+
+**Resolution:** map cited SOURCE numbers back to provider metadata and require at least one cited evidence source from every requested provider.
+
+### Challenge 8 — Follow-up questions were not standalone
+
+A question such as "How does Azure compare with that?" cannot be retrieved correctly without conversation context.
+
+**Resolution:** load the recent persistent SQLite history and rewrite the follow-up into a standalone question before retrieval.
+
+### Challenge 9 — Production parity
+
+Passing notebook code is insufficient if the repository Streamlit code is different.
+
+**Resolution:** move the validated logic into `src/rag_v12_pipeline.py`, have `src/streamlit_app.py` import that backend, verify the committed files match the tested production files, then perform the browser test from repository code.
+
+## Validation proof
+
+See [V12 validation proof](results/v12-validation.md) for the complete measured evidence.
 
 ~~~text
 Stage 1 — Multi-document ingestion:              17/17 PASS
@@ -363,6 +168,16 @@ Stage 3 — Retrieval + reranking:                  27/27 PASS
 Stage 4 — Grounded answers + citations:           52/52 PASS
 Stage 5A — Jupyter memory/UI backend validation:  40/40 PASS
 Stage 5B — Streamlit browser validation:          PASS
-
-RAG V12 — MULTI-DOCUMENT MULTI-CLOUD RAG: COMPLETE
 ~~~
+
+## Production files
+
+- `src/rag_v12_pipeline.py` — V12 production backend
+- `src/streamlit_app.py` — V12 production UI
+- `src/memory_db.py` — persistent SQLite memory
+- `docs/rag-v12-multicloud-architecture.svg` — architecture diagram
+- `docs/results/v12-validation.md` — measured validation proof
+
+## Final status
+
+**RAG V12 — MULTI-DOCUMENT MULTI-CLOUD RAG: COMPLETE**
