@@ -180,3 +180,13 @@ RAG V12 — MULTI-DOCUMENT MULTI-CLOUD RAG: COMPLETE
 ## Evidence discipline
 
 Only observed runtime results are listed as proof. No unexecuted or hypothetical test is labeled PASS.
+
+
+## SQLite persistence proof
+
+Detailed conversation/message persistence evidence and the reusable query script are documented here:
+
+- [V12 SQLite persistent memory proof](v12-sqlite-memory-proof.md)
+- Query script: `scripts/v12_query_sqlite_memory.sql`
+
+The SQLite database itself remains local and is not committed because it can contain conversation content.
