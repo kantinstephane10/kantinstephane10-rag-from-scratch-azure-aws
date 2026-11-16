@@ -1,415 +1,318 @@
-# RAG From Scratch — RAG V11
+# RAG From Scratch — V12 Multi-Document Multi-Cloud RAG
 
-This branch contains **RAG V11: Pinecone Vector Database**.
+This repository is a progressive, hands-on RAG engineering project built from first principles and evolved through multiple validated milestones.
 
-## Branch
+The current milestone is **RAG V12: Multi-Document Multi-Cloud RAG**.
 
-```text
-feature/mba-rag-v11-pinecone-vector-db
-```
+## Current V12 scope
 
-V11 replaces the local ChromaDB vector store with **Pinecone** while preserving the validated V10 persistent-memory architecture and the validated V9 retrieval behavior.
+V12 expands the system from a single private source document to a heterogeneous cloud corpus spanning:
 
----
+| Provider | PDFs | Pages | Chunks |
+| --- | ---: | ---: | ---: |
+| AWS | 8 | 2,324 | 7,437 |
+| Azure | 5 | 174 | 790 |
+| GCP | 5 | 71 | 232 |
+| Oracle | 4 | 116 | 492 |
+| IBM | 5 | 766 | 2,551 |
+| **Total** | **27** | **3,451** | **11,502** |
 
-## Architecture
+The source PDFs remain local and are intentionally excluded from Git.
+
+## V12 architecture
 
 <p align="center">
   <img
-    src="docs/rag-v11-pinecone-architecture.svg"
-    alt="RAG V11 Pinecone Vector Database Architecture"
+    src="docs/rag-v12-multicloud-architecture.svg"
+    alt="RAG V12 Multi-Document Multi-Cloud Architecture"
     width="100%"
   />
 </p>
 
-```text
-Private Local PDF
-      ↓
-PyMuPDF + Cleaning
-      ↓
-Course/Page Metadata
-      ↓
-Recursive Chunking
-      ↓
-MiniLM Embeddings
-      ↓
-384-dimensional normalized vectors
-      ↓
-PINECONE
-      ↓
-Focused / Broad Retrieval
-      ↓
-Neighbor Expansion ±1
-      ↓
-CrossEncoder Reranking
-      ↓
-Ollama
-      ↓
-Deterministic Citations
-      ↓
-Streamlit
-      ↓
-SQLite Persistent Conversation Memory
-```
-
----
-
-## What changed in V11?
-
-### V10
-
-```text
-MiniLM
-  ↓
-ChromaDB
-  ↓
-Neighbor Expansion
-  ↓
-CrossEncoder
-```
-
-### V11
-
-```text
-MiniLM
-  ↓
+~~~text
+AWS / Azure / GCP / Oracle / IBM PDFs
+                    ↓
+                 PyMuPDF
+                    ↓
+              Text cleaning
+                    ↓
+Provider + document + PDF-page metadata
+                    ↓
+RecursiveCharacterTextSplitter
+800 characters / 120 overlap
+                    ↓
+Document-safe chunk IDs
+                    ↓
+MiniLM normalized 384-d embeddings
+                    ↓
 Pinecone
-  ↓
-Neighbor Expansion
-  ↓
-CrossEncoder
-```
+multicloud-rag-v12 / cloud-documents
+                    ↓
+Global / provider / document / cross-provider retrieval
+                    ↓
+Same-PDF neighbor expansion ±1
+                    ↓
+Deduplication + low-information filtering
+                    ↓
+CrossEncoder reranking
+                    ↓
+Ollama qwen3:4b-instruct
+                    ↓
+Strict [SOURCE N] validation
+                    ↓
+Deterministic provider/document/PDF-page citations
+                    ↓
+SQLite persistent conversational memory
+                    ↓
+Streamlit production UI
+~~~
 
-Only the vector-database layer changed.
+## Production stack
 
-The following behavior remains preserved:
+- Python 3.12+
+- uv
+- LangChain Community document loaders
+- LangChain text splitters
+- PyMuPDF
+- SentenceTransformers
+- `sentence-transformers/all-MiniLM-L6-v2`
+- Pinecone
+- `cross-encoder/ms-marco-MiniLM-L6-v2`
+- Ollama
+- `qwen3:4b-instruct`
+- SQLite
+- Streamlit
 
-- PyMuPDF document loading;
-- text cleaning;
-- course/page metadata;
-- recursive chunking;
-- local MiniLM embeddings;
-- focused vs. broad query routing;
-- neighbor expansion;
-- CrossEncoder reranking;
-- course relevance filtering;
-- Ollama generation;
+## What V12 added
+
+### Multi-document identity
+
+Every chunk carries trusted metadata including:
+
+~~~text
+provider
+document_id
+document_title
+source
+pdf_page
+document_chunk_number
+global_chunk_number
+chunk_id
+~~~
+
+### Document-safe neighbor expansion
+
+Neighbors are keyed by:
+
+~~~text
+(document_id, document_chunk_number)
+~~~
+
+This prevents the final chunk of one PDF from expanding into a different PDF.
+
+### Provider-aware retrieval
+
+V12 supports:
+
+- global multi-cloud retrieval;
+- single-provider retrieval;
+- specific-document retrieval;
+- cross-document retrieval;
+- cross-provider comparisons.
+
+### Reranking
+
+Pinecone performs dense semantic candidate retrieval. The CrossEncoder then reads the query and candidate text together and reranks the evidence before generation.
+
+### Grounded deterministic citations
+
+The LLM emits neutral markers such as:
+
+~~~text
+[SOURCE 2]
+~~~
+
+Python validates the marker and maps it to trusted metadata:
+
+~~~text
+[AWS | AWS Reliability Pillar | PDF page 9]
+~~~
+
+The model does not invent final provider/document/page citations.
+
+### Persistent conversational memory
+
+SQLite stores:
+
+- conversations;
+- user and assistant messages;
+- query type;
+- standalone rewritten follow-up question;
+- retrieved evidence JSON.
+
+Only the recent memory window is supplied to the LLM for conversational context.
+
+### Production Streamlit UI
+
+The UI supports:
+
+- Auto routing;
+- All Providers;
+- Single Provider;
+- Compare Providers;
+- Specific Document;
+- source/evidence inspection;
 - deterministic citations;
-- grounded refusal;
-- SQLite persistent conversational memory;
-- multiple Streamlit conversations;
-- rename, clear, delete, and restart persistence.
+- persistent conversations;
+- rename, clear, and delete conversation controls.
 
----
+## V12 measured proof
 
-## Pinecone design
+All PASS results below are observed runtime results.
 
-V11 keeps embeddings local.
+~~~text
+Stage 1 — Multi-document ingestion:              17/17 PASS
+Stage 2 — Pinecone multi-document index:         22/22 PASS
+Stage 3 — Retrieval + reranking:                  27/27 PASS
+Stage 4 — Grounded answers + citations:           52/52 PASS
+Stage 5A — Jupyter memory/UI backend validation:  40/40 PASS
+Stage 5B — Streamlit browser validation:          PASS
 
-Embedding model:
+RAG V12 — MULTI-DOCUMENT MULTI-CLOUD RAG: COMPLETE
+~~~
 
-```text
-sentence-transformers/all-MiniLM-L6-v2
-```
+Detailed proof:
 
-Vector configuration:
+- [V12 validation proof](docs/results/v12-validation.md)
+- [V12 SQLite persistent-memory proof](docs/results/v12-sqlite-memory-proof.md)
+- [V12 architecture, design decisions, and challenges](docs/v12-multi-document-rag.md)
 
-```text
-dimension = 384
-metric = cosine
-field = embedding
-```
+## V12 engineering challenges
 
-Default Pinecone configuration:
+The V12 documentation records the major issues encountered and the resolutions, including:
 
-```text
-index = mba-rag-v11
-namespace = mba-portfolio
-```
+1. scaling from one document to 27 heterogeneous PDFs;
+2. preventing neighbor expansion across PDF boundaries;
+3. the GCP Enterprise Foundations one-chunk parsing anomaly;
+4. Jupyter/uv/Pinecone environment mismatch;
+5. weak title-only Azure comparison evidence;
+6. invalid `[SOURCE N]` values generated by the LLM;
+7. enforcing provider coverage in comparisons;
+8. rewriting follow-up questions such as “How does Azure compare with that?”;
+9. keeping notebook-tested logic and production Streamlit code aligned.
 
-Each RAG chunk is stored in Pinecone with its vector and trusted retrieval metadata.
+See [docs/v12-multi-document-rag.md](docs/v12-multi-document-rag.md).
 
-Example shape:
+## V12 production files
 
-```python
-{
-    "_id": "mba_chunk_0000",
-    "embedding": [...],
-    "text": "...",
-    "source": "...",
-    "pdf_page": 10,
-    "course": "C200",
-    "chapter": "...",
-    "rag_chunk_number": 0,
-}
-```
+~~~text
+src/
+├── rag_v12_pipeline.py
+├── streamlit_app.py
+├── memory_db.py
+├── rag_v12_multidoc.py
+└── rag_v12_multidoc_test.py
 
----
+notebooks/
+├── v12_multi_document_rag_stage1.ipynb
+└── v12_multi_document_rag_stage2_pinecone.ipynb
 
-## Focused retrieval
+docs/
+├── rag-v12-multicloud-architecture.svg
+├── v12-multi-document-rag.md
+└── results/
+    ├── v12-validation.md
+    └── v12-sqlite-memory-proof.md
 
-```text
-Question
-   ↓
-MiniLM Query Embedding
-   ↓
-Pinecone Top 8
-   ↓
-Neighbor Expansion ±1
-   ↓
-CrossEncoder
-   ↓
-Best 3
-   ↓
-Ollama
-   ↓
-Grounded Answer
-```
+scripts/
+└── v12_query_sqlite_memory.sql
+~~~
 
----
+## Run V12 locally
 
-## Broad retrieval
+Clone and enter the repository:
 
-```text
-Question
-   ↓
-MiniLM Query Embedding
-   ↓
-For each course:
-    Pinecone metadata filter
-    ↓
-    Top 4
-    ↓
-    Neighbor Expansion ±1
-    ↓
-    CrossEncoder
-    ↓
-    Best 2
-   ↓
-Course Relevance Gate
-   ↓
-Ollama
-   ↓
-Grounded Answer
-```
+~~~powershell
+git clone https://github.com/kantinstephane10/kantinstephane10-rag-from-scratch-azure-aws.git
+cd kantinstephane10-rag-from-scratch-azure-aws
+~~~
 
----
+Install dependencies:
 
-## Persistent conversation memory
-
-V11 keeps the V10 SQLite memory layer.
-
-```text
-Streamlit
-   ↓
-SQLite
-   ↓
-Full Conversation History
-   ↓
-Recent 12 Messages
-   ↓
-LLM Context
-```
-
-The complete conversation is stored locally in SQLite, while only the most recent 12 messages are sent to the LLM.
-
----
-
-## Observed initialization
-
-```text
-Pages loaded: 143
-All chunks: 366
-Course chunks: 354
-Final indexed chunks: 351
-Embedding shape: (351, 384)
-Pinecone documents ready: 351
-Index: mba-rag-v11
-Namespace: mba-portfolio
-```
-
----
-
-## Validation
-
-### Pinecone vector database
-
-```powershell
-uv run python src/rag_v11_pinecone_test.py
-```
-
-Observed:
-
-```text
-Tests passed: 14/14
-Accuracy: 100.0%
-V11 PINECONE VECTOR DATABASE: PASS
-```
-
-Validated:
-
-- Pinecone authentication;
-- index creation;
-- dense-vector schema;
-- 384 dimensions;
-- cosine similarity;
-- 351 stored documents;
-- semantic search;
-- metadata restoration;
-- similarity scores;
-- metadata filters;
-- focused retrieval;
-- C200 page 10 retrieval;
-- CrossEncoder compatibility.
-
-### RAG regression
-
-```powershell
-uv run python src/rag_v9_evaluation.py
-```
-
-Observed:
-
-```text
-Tests passed: 12/12
-Accuracy: 100.0%
-V9 REGRESSION TEST: PASS
-```
-
-This confirms Pinecone preserved the validated retrieval, reranking, follow-up rewriting, citations, broad-query filtering, and grounded-refusal behavior.
-
-### SQLite memory regression
-
-```powershell
-uv run python src/rag_v10_memory_test.py
-```
-
-Observed:
-
-```text
-Tests passed: 18/18
-Accuracy: 100.0%
-V10 REPO MEMORY TEST: PASS
-```
-
-### Streamlit browser validation
-
-Observed:
-
-```text
-PASS
-```
-
-Validated:
-
-- Pinecone-backed focused retrieval;
-- Pinecone-backed broad retrieval;
-- persistent SQLite memory;
-- new conversation;
-- switch conversation;
-- rename;
-- clear;
-- delete;
-- restart persistence;
-- deterministic citations;
-- grounded refusal.
-
-Full V11 details:
-
-[docs/v11-pinecone-vector-db.md](docs/v11-pinecone-vector-db.md)
-
----
-
-## Environment
-
-Required:
-
-```text
-PINECONE_API_KEY
-```
-
-Optional:
-
-```text
-PINECONE_INDEX_NAME=mba-rag-v11
-PINECONE_NAMESPACE=mba-portfolio
-```
-
-PowerShell example:
-
-```powershell
-$env:PINECONE_API_KEY="YOUR_REAL_PINECONE_API_KEY"
-$env:PINECONE_INDEX_NAME="mba-rag-v11"
-$env:PINECONE_NAMESPACE="mba-portfolio"
-```
-
-Never commit the real API key.
-
----
-
-## Run V11
-
-```powershell
-git switch feature/mba-rag-v11-pinecone-vector-db
-git pull origin feature/mba-rag-v11-pinecone-vector-db
+~~~powershell
 uv sync
-```
+~~~
 
-Run Pinecone validation:
+Make sure Ollama has the required model:
 
-```powershell
-uv run python src/rag_v11_pinecone_test.py
-```
+~~~powershell
+ollama list
+~~~
 
-Run RAG regression:
+Expected model:
 
-```powershell
-uv run python src/rag_v9_evaluation.py
-```
+~~~text
+qwen3:4b-instruct
+~~~
 
-Run memory regression:
+Set the Pinecone key locally:
 
-```powershell
-uv run python src/rag_v10_memory_test.py
-```
+~~~powershell
+$env:PINECONE_API_KEY="YOUR_PINECONE_API_KEY"
+~~~
 
 Run Streamlit:
 
-```powershell
-uv run streamlit run src/streamlit_app.py
-```
+~~~powershell
+uv run streamlit run src\streamlit_app.py
+~~~
 
----
+## SQLite proof query
 
-## Private source document
+The live SQLite database is local and intentionally not committed.
 
-The source PDF is intentionally **not stored in GitHub**.
+Query it with:
 
-The application expects the local file at:
+~~~powershell
+sqlite3 data/memory/rag_v10_memory.db < scripts/v12_query_sqlite_memory.sql
+~~~
 
-```text
-data/text_files/pdf/WGU_MBA_IT_Management_Bound_Edition_Biography_At_Beginning.pdf
-```
+The query displays:
 
-The repository's `.gitignore` protects PDFs in this path from accidental commits.
+- conversations;
+- message counts;
+- stored roles;
+- query types;
+- standalone questions;
+- stored evidence counts;
+- latest conversation turn summaries.
 
----
+## Repository history
 
-## V11 milestone result
+This project intentionally keeps its earlier milestones and baseline architecture for learning and comparison.
 
-```text
-Pinecone vector DB test:       14/14 PASS
-V9 RAG regression:             12/12 PASS
-V10 memory regression:         18/18 PASS
-Streamlit browser validation:  PASS
+### Original RAG baseline
 
-RAG V11 — PINECONE VECTOR DATABASE: COMPLETE
-```
+- [Original architecture](docs/rag-architecture.svg)
+- [Original validation proof](docs/results/original-rag-validation.md)
 
----
+### Later milestone artifacts
 
-## Next milestone
+The repository also contains architecture and validation artifacts for V5.2 through V11, showing how the system evolved from local Chroma retrieval to query-aware retrieval, conversational memory, persistent SQLite memory, and Pinecone.
 
-### V12 — Multi-Document RAG
+## Security
 
-V12 will extend the Pinecone-backed system from one private source document to multiple documents with document-aware metadata, filtering, retrieval, and citations.
+Do not commit:
+
+- real Pinecone API keys;
+- private source PDFs;
+- SQLite conversation databases;
+- local vector database directories.
+
+The repository includes `.env.example` and `.gitignore` rules for local-only data.
+
+## Current milestone
+
+**RAG V12 — MULTI-DOCUMENT MULTI-CLOUD RAG: COMPLETE**
+
+Next roadmap milestone: **V13 — Hybrid Search**.
