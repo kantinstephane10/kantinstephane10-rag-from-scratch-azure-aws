@@ -1,12 +1,14 @@
-# RAG From Scratch — V12 Multi-Document Multi-Cloud RAG
+# RAG From Scratch — V13 Hybrid Search
 
-This repository is a progressive, hands-on RAG engineering project built from first principles and evolved through multiple validated milestones.
+This repository is a progressive, hands-on RAG engineering project built from first principles and evolved through validated milestones.
 
-The current milestone is **RAG V12: Multi-Document Multi-Cloud RAG**.
+The current milestone is **RAG V13: Hybrid Search (Dense + Sparse)**.
 
-## Current V12 scope
+> **Source status:** the exact V13 runtime files `src/rag_v13.py` and `src/streamlit_v13.py` were validated on the development workstation. The V13 architecture, milestone documentation, and validation proof are committed here; the two local runtime files still need to be committed from that workstation so GitHub matches the tested local environment exactly.
 
-V12 expands the system from a single private source document to a heterogeneous cloud corpus spanning:
+## Current V13 scope
+
+V13 keeps the V12 multi-cloud corpus and upgrades retrieval from dense-only semantic search to a hybrid pipeline using **Pinecone + BM25 + Reciprocal Rank Fusion (RRF)**.
 
 | Provider | PDFs | Pages | Chunks |
 | --- | ---: | ---: | ---: |
@@ -19,53 +21,47 @@ V12 expands the system from a single private source document to a heterogeneous 
 
 The source PDFs remain local and are intentionally excluded from Git.
 
-## V12 architecture
+## V13 architecture
 
 <p align="center">
   <img
-    src="docs/rag-v12-multicloud-architecture.svg"
-    alt="RAG V12 Multi-Document Multi-Cloud Architecture"
+    src="docs/rag-v13-hybrid-architecture.svg"
+    alt="RAG V13 Hybrid Search Multi-Cloud Architecture"
     width="100%"
   />
 </p>
 
-~~~text
-AWS / Azure / GCP / Oracle / IBM PDFs
-                    ↓
-                 PyMuPDF
-                    ↓
-              Text cleaning
-                    ↓
-Provider + document + PDF-page metadata
-                    ↓
-RecursiveCharacterTextSplitter
-800 characters / 120 overlap
-                    ↓
-Document-safe chunk IDs
-                    ↓
-MiniLM normalized 384-d embeddings
-                    ↓
-Pinecone
-multicloud-rag-v12 / cloud-documents
-                    ↓
-Global / provider / document / cross-provider retrieval
-                    ↓
-Same-PDF neighbor expansion ±1
-                    ↓
-Deduplication + low-information filtering
-                    ↓
-CrossEncoder reranking
-                    ↓
-Ollama qwen3:4b-instruct
-                    ↓
-Strict [SOURCE N] validation
-                    ↓
-Deterministic provider/document/PDF-page citations
-                    ↓
-SQLite persistent conversational memory
-                    ↓
-Streamlit production UI
-~~~
+```text
+User query
+    ↓
+Conversation-aware rewrite
+    ↓
+┌──────────────────────────┐      ┌──────────────────────────┐
+│ Dense retrieval          │      │ Sparse retrieval         │
+│ MiniLM → Pinecone        │      │ BM25 lexical search      │
+│ Top 20                   │      │ Top 20                   │
+└──────────────────────────┘      └──────────────────────────┘
+              \                    /
+               \                  /
+                ↓                ↓
+             Reciprocal Rank Fusion
+                      ↓
+          Same-document neighbors ±1
+                      ↓
+          Deduplicate + filter noise
+                      ↓
+             CrossEncoder reranking
+                      ↓
+              Best 5 evidence chunks
+                      ↓
+          Ollama qwen3:4b-instruct
+                      ↓
+           Strict source validation
+                      ↓
+      Trusted provider/document/page citations
+                      ↓
+          SQLite memory + Streamlit
+```
 
 ## Production stack
 
@@ -77,68 +73,70 @@ Streamlit production UI
 - SentenceTransformers
 - `sentence-transformers/all-MiniLM-L6-v2`
 - Pinecone
+- `rank_bm25.BM25Okapi`
+- Reciprocal Rank Fusion
 - `cross-encoder/ms-marco-MiniLM-L6-v2`
 - Ollama
 - `qwen3:4b-instruct`
 - SQLite
 - Streamlit
 
-## What V12 added
+## What V13 added
 
-### Multi-document identity
+### Dense + sparse retrieval
 
-Every chunk carries trusted metadata including:
+Dense retrieval handles semantic similarity and paraphrases. BM25 adds exact lexical matching for technical terms, identifiers, service names, and codes.
 
-~~~text
-provider
-document_id
-document_title
-source
-pdf_page
-document_chunk_number
-global_chunk_number
-chunk_id
-~~~
+Examples that benefit from BM25 include:
 
-### Document-safe neighbor expansion
+```text
+SEC11-BP06
+HTTP-502
+active.htm
+us-east-1
+```
 
-Neighbors are keyed by:
+### Reciprocal Rank Fusion
 
-~~~text
-(document_id, document_chunk_number)
-~~~
+V13 fuses the dense and sparse ranked lists with:
 
-This prevents the final chunk of one PDF from expanding into a different PDF.
+```text
+RRF score(d) = Σ 1 / (k + rankᵣ(d))
+```
 
-### Provider-aware retrieval
+with `k = 60`.
 
-V12 supports:
+This avoids directly adding BM25 and cosine scores, which are not on the same scale.
 
-- global multi-cloud retrieval;
-- single-provider retrieval;
-- specific-document retrieval;
-- cross-document retrieval;
-- cross-provider comparisons.
+### Retrieval configuration
 
-### Reranking
+```text
+DENSE_TOP_K = 20
+BM25_TOP_K = 20
+RRF_K = 60
+FUSION_TOP_K = 25
+NEIGHBOR_RANGE = 1
+FINAL_TOP_K = 5
+MIN_EVIDENCE_CHARS = 120
+```
 
-Pinecone performs dense semantic candidate retrieval. The CrossEncoder then reads the query and candidate text together and reranks the evidence before generation.
+Cross-provider comparisons use a larger provider-specific candidate pool before balancing evidence.
 
-### Grounded deterministic citations
+### Grounding and citation integrity
 
 The LLM emits neutral markers such as:
 
-~~~text
+```text
 [SOURCE 2]
-~~~
+```
 
-Python validates the marker and maps it to trusted metadata:
+Python validates and maps them to trusted metadata:
 
-~~~text
+```text
 [AWS | AWS Reliability Pillar | PDF page 9]
-~~~
+```
 
-The model does not invent final provider/document/page citations.
+V13 hardens this pipeline by rejecting malformed, negative, and out-of-range source numbers, normalizing combined source markers, and collapsing adjacent duplicate final citations.
 
 ### Persistent conversational memory
 
@@ -150,180 +148,120 @@ SQLite stores:
 - standalone rewritten follow-up question;
 - retrieved evidence JSON.
 
-Only the recent memory window is supplied to the LLM for conversational context.
+The recent memory window is used to rewrite follow-up questions before retrieval.
 
-### Production Streamlit UI
+### Comparison-aware global routing
 
-The UI supports:
+Global mode can detect obvious multi-cloud comparison intent without requiring the user to manually switch modes.
 
-- Auto routing;
-- All Providers;
-- Single Provider;
-- Compare Providers;
-- Specific Document;
-- source/evidence inspection;
-- deterministic citations;
-- persistent conversations;
-- rename, clear, and delete conversation controls.
+Examples:
 
-## Pinecone visual proof
+```text
+Compare AWS and Azure
+→ AWS + Azure balanced retrieval
 
-The V12 Pinecone dashboard below shows the production `multicloud-rag-v12` index with **11,502 records** in the `cloud-documents` namespace.
+What is AWS?
+Compare it to Azure
+→ conversation context resolves AWS + Azure
 
-<p align="center">
-  <img
-    src="docs/results/v12-pinecone-index-proof.jpg"
-    alt="Pinecone V12 multicloud-rag-v12 index showing 11,502 records"
-    width="100%"
-  />
-</p>
+Compare different cloud services side by side
+→ AWS + Azure + GCP + Oracle + IBM
+```
 
+This is a deterministic V13 routing layer, not the later V18 model-based router.
 
-## Pinecone index visual proof
+### Live Streamlit generation
 
-The V12 Pinecone index contains **11,502 records** in the `cloud-documents` namespace.
+The production UI streams Ollama tokens live into the browser while preserving the validated backend pipeline.
 
-<p align="center">
-  <img
-    src="docs/results/v12-pinecone-index-proof.jpg"
-    alt="Pinecone multicloud-rag-v12 index showing 11,502 records"
-    width="100%"
-  />
-</p>
+The final browser answer is replaced with the trusted citation-rendered answer after generation completes.
 
-## V12 measured proof
+## V13 benchmark
 
-All PASS results below are observed runtime results.
+A 10-query development benchmark produced:
 
-~~~text
-Stage 1 — Multi-document ingestion:              17/17 PASS
-Stage 2 — Pinecone multi-document index:         22/22 PASS
-Stage 3 — Retrieval + reranking:                  27/27 PASS
-Stage 4 — Grounded answers + citations:           52/52 PASS
-Stage 5A — Jupyter memory/UI backend validation:  40/40 PASS
-Stage 5B — Streamlit browser validation:          PASS
+| Retriever | Hit@1 | Hit@3 | Hit@5 | MRR |
+| --- | ---: | ---: | ---: | ---: |
+| Dense | 0.90 | 1.00 | 1.00 | 0.9333 |
+| BM25 | 0.80 | 1.00 | 1.00 | 0.8833 |
+| Hybrid | 0.90 | 1.00 | 1.00 | **0.9500** |
 
-RAG V12 — MULTI-DOCUMENT MULTI-CLOUD RAG: COMPLETE
-~~~
+On this starter benchmark, Hybrid preserved Dense Hit@1 and improved MRR. This is a development result, not a universal claim.
+
+## V13 production validation
+
+Fresh-process backend test:
+
+```text
+Backend cache independent:             PASS
+BM25 independent:                      PASS
+Pinecone dense search independent:     PASS
+Hybrid retrieval independent:          PASS
+Cross-provider retrieval independent:  PASS
+
+Tests passed: 5/5
+V13 PRODUCTION BACKEND INDEPENDENCE: PASS
+```
+
+Fresh-process live streaming test:
+
+```text
+Callback received tokens:       PASS
+Raw answer created:             PASS
+Citation validation:            PASS
+Trusted final citations:        PASS
+SQLite persisted 2 messages:    PASS
+
+Tests passed: 5/5
+V13 PRODUCTION LIVE STREAMING: PASS
+```
+
+Browser validation confirmed:
+
+- Global mode
+- Single-provider mode
+- Cross-provider mode
+- live token streaming
+- trusted citations
+- retrieved-evidence inspection
+- persistent SQLite conversation memory
+- follow-up rewriting
+- comparison-aware global routing
+- citation hardening
 
 Detailed proof:
 
-- [V12 validation proof](docs/results/v12-validation.md)
-- [V12 SQLite persistent-memory proof](docs/results/v12-sqlite-memory-proof.md)
-- [V12 architecture, design decisions, and challenges](docs/v12-multi-document-rag.md)
+- [V13 architecture and engineering notes](docs/v13-hybrid-search.md)
+- [V13 validation proof](docs/results/v13-validation.md)
+- [V13 architecture diagram](docs/rag-v13-hybrid-architecture.svg)
 
-## V12 engineering challenges
+## Corpus coverage finding
 
-The V12 documentation records the major issues encountered and the resolutions, including:
+The V13 provider/topic audit showed that retrieval is working, but the 27-document corpus is not evenly balanced across every provider and topic.
 
-1. scaling from one document to 27 heterogeneous PDFs;
-2. preventing neighbor expansion across PDF boundaries;
-3. the GCP Enterprise Foundations one-chunk parsing anomaly;
-4. Jupyter/uv/Pinecone environment mismatch;
-5. weak title-only Azure comparison evidence;
-6. invalid `[SOURCE N]` values generated by the LLM;
-7. enforcing provider coverage in comparisons;
-8. rewriting follow-up questions such as “How does Azure compare with that?”;
-9. keeping notebook-tested logic and production Streamlit code aligned.
+Examples:
 
-See [docs/v12-multi-document-rag.md](docs/v12-multi-document-rag.md).
+- AWS: strong security/reliability coverage
+- Azure: strong reliability/cloud-native coverage
+- GCP: current corpus is security-heavy
+- Oracle: strong IAM/networking coverage
+- IBM: strong object-storage coverage
 
-## V12 production files
+The corpus-gap plan is a backlog item and does not block the V13 hybrid-search milestone.
 
-~~~text
-src/
-├── rag_v12_pipeline.py
-├── streamlit_app.py
-├── memory_db.py
-├── rag_v12_multidoc.py
-└── rag_v12_multidoc_test.py
+## Pinecone
 
-notebooks/
-├── v12_multi_document_rag_stage1.ipynb
-└── v12_multi_document_rag_stage2_pinecone.ipynb
+V13 intentionally reuses the V12 dense index because the stored dense representation did not change:
 
-docs/
-├── rag-v12-multicloud-architecture.svg
-├── v12-multi-document-rag.md
-└── results/
-    ├── v12-validation.md
-    └── v12-sqlite-memory-proof.md
+```text
+Index: multicloud-rag-v12
+Namespace: cloud-documents
+Records: 11,502
+Vector field: embedding
+Dimension: 384
+```
 
-scripts/
-└── v12_query_sqlite_memory.sql
-~~~
-
-## Run V12 locally
-
-Clone and enter the repository:
-
-~~~powershell
-git clone https://github.com/kantinstephane10/kantinstephane10-rag-from-scratch-azure-aws.git
-cd kantinstephane10-rag-from-scratch-azure-aws
-~~~
-
-Install dependencies:
-
-~~~powershell
-uv sync
-~~~
-
-Make sure Ollama has the required model:
-
-~~~powershell
-ollama list
-~~~
-
-Expected model:
-
-~~~text
-qwen3:4b-instruct
-~~~
-
-Set the Pinecone key locally:
-
-~~~powershell
-$env:PINECONE_API_KEY="YOUR_PINECONE_API_KEY"
-~~~
-
-Run Streamlit:
-
-~~~powershell
-uv run streamlit run src\streamlit_app.py
-~~~
-
-## SQLite proof query
-
-The live SQLite database is local and intentionally not committed.
-
-Query it with:
-
-~~~powershell
-sqlite3 data/memory/rag_v10_memory.db < scripts/v12_query_sqlite_memory.sql
-~~~
-
-The query displays:
-
-- conversations;
-- message counts;
-- stored roles;
-- query types;
-- standalone questions;
-- stored evidence counts;
-- latest conversation turn summaries.
-
-## Repository history
-
-This project intentionally keeps its earlier milestones and baseline architecture for learning and comparison.
-
-### Original RAG baseline
-
-- [Original architecture](docs/rag-architecture.svg)
-- [Original validation proof](docs/results/original-rag-validation.md)
-
-### Later milestone artifacts
-
-The repository also contains architecture and validation artifacts for V5.2 through V11, showing how the system evolved from local Chroma retrieval to query-aware retrieval, conversational memory, persistent SQLite memory, and Pinecone.
+BM25 is built locally over the same 11,502 chunks and fused with Pinecone results at query time.
 
 ## Security
 
@@ -332,12 +270,37 @@ Do not commit:
 - real Pinecone API keys;
 - private source PDFs;
 - SQLite conversation databases;
-- local vector database directories.
+- local vector database directories;
+- trusted local cache files containing private corpus text unless explicitly intended.
 
 The repository includes `.env.example` and `.gitignore` rules for local-only data.
 
+## Previous milestone
+
+V12 introduced the 27-document, five-provider corpus, document-safe chunk identity, Pinecone multi-document retrieval, CrossEncoder reranking, deterministic citations, SQLite memory, and the production Streamlit baseline.
+
+- [V12 architecture](docs/rag-v12-multicloud-architecture.svg)
+- [V12 engineering notes](docs/v12-multi-document-rag.md)
+- [V12 validation proof](docs/results/v12-validation.md)
+
+## Roadmap
+
+```text
+V13  Hybrid Search                         COMPLETE
+V14  Metadata-Aware Retrieval              NEXT
+V15  Advanced Chunking
+V16  Query Transformation
+V17  Advanced Retrieval / Reranking
+V18  Model-Based Router
+V19  Specialized Models / Tasks
+V20  Evaluation + Observability
+V21  Guardrails + Security
+V22  Agentic RAG / Tool Routing
+V23  Production Deployment
+```
+
 ## Current milestone
 
-**RAG V12 — MULTI-DOCUMENT MULTI-CLOUD RAG: COMPLETE**
+**RAG V13 — HYBRID SEARCH: COMPLETE**
 
-Next roadmap milestone: **V13 — Hybrid Search**.
+Next: **V14 — Metadata-Aware Retrieval**.
