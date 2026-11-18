@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1420" viewBox="0 0 1800 1420">
+  <defs>
+    <style>
+      .bg{fill:#f7f9fc}.title{font:700 34px Arial,sans-serif;fill:#0f172a}.subtitle{font:400 17px Arial,sans-serif;fill:#475569}
+      .section{font:700 18px Arial,sans-serif;fill:#0f172a}.label{font:700 16px Arial,sans-serif;fill:#0f172a}
+      .body{font:400 14px Arial,sans-serif;fill:#334155}.small{font:400 12px Arial,sans-serif;fill:#475569}
+      .box{fill:#fff;stroke:#cbd5e1;stroke-width:2;rx:16}.dense{fill:#ecfdf5;stroke:#10b981;stroke-width:2.3;rx:16}
+      .sparse{fill:#f5f3ff;stroke:#8b5cf6;stroke-width:2.3;rx:16}.fusion{fill:#eff6ff;stroke:#3b82f6;stroke-width:2.3;rx:16}
+      .core{fill:#eef2ff;stroke:#6366f1;stroke-width:2.3;rx:16}.store{fill:#ecfeff;stroke:#06b6d4;stroke-width:2.3;rx:16}
+      .gen{fill:#fdf4ff;stroke:#d946ef;stroke-width:2.3;rx:16}.ui{fill:#ecfdf5;stroke:#10b981;stroke-width:2.3;rx:16}
+      .aws{fill:#fff7ed;stroke:#ff9900;stroke-width:2;rx:14}.azure{fill:#eff6ff;stroke:#0078d4;stroke-width:2;rx:14}
+      .gcp{fill:#f0fdf4;stroke:#4285f4;stroke-width:2;rx:14}.oracle{fill:#fef2f2;stroke:#f80000;stroke-width:2;rx:14}
+      .ibm{fill:#eef2ff;stroke:#0f62fe;stroke-width:2;rx:14}.metric{fill:#0f172a;rx:12}.metricText{font:700 15px Arial,sans-serif;fill:#fff}
+      .arrow{stroke:#64748b;stroke-width:3;fill:none;marker-end:url(#arrowhead)}.dash{stroke:#94a3b8;stroke-width:2;stroke-dasharray:8 7;fill:none;marker-end:url(#arrowhead)}
+      .brand{font:700 15px Arial,sans-serif}.iconText{font:700 13px Arial,sans-serif;fill:#fff}
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1800" height="1420"/>
+  <text class="title" x="70" y="58">RAG V13 — Hybrid Search Architecture</text>
+  <text class="subtitle" x="70" y="90">Dense Pinecone + Sparse BM25 + RRF + CrossEncoder + Ollama + SQLite + Streamlit</text>
+
+  <text class="section" x="70" y="138">1. Multi-cloud knowledge base</text>
+  <rect class="aws" x="70" y="158" width="270" height="95"/><circle cx="105" cy="190" r="19" fill="#ff9900"/><text class="iconText" x="91" y="195">AWS</text><text class="brand" x="135" y="190" fill="#232f3e">Amazon Web Services</text><text class="body" x="95" y="222">8 PDFs • 2,324 pages • 7,437 chunks</text>
+  <rect class="azure" x="365" y="158" width="270" height="95"/><circle cx="400" cy="190" r="19" fill="#0078d4"/><text class="iconText" x="390" y="195">AZ</text><text class="brand" x="430" y="190" fill="#0078d4">Microsoft Azure</text><text class="body" x="390" y="222">5 PDFs • 174 pages • 790 chunks</text>
+  <rect class="gcp" x="660" y="158" width="270" height="95"/><circle cx="695" cy="190" r="19" fill="#4285f4"/><text class="iconText" x="682" y="195">GCP</text><text class="brand" x="725" y="190" fill="#4285f4">Google Cloud</text><text class="body" x="685" y="222">5 PDFs • 71 pages • 232 chunks</text>
+  <rect class="oracle" x="955" y="158" width="270" height="95"/><circle cx="990" cy="190" r="19" fill="#f80000"/><text class="iconText" x="978" y="195">OCI</text><text class="brand" x="1020" y="190" fill="#c74634">Oracle Cloud</text><text class="body" x="980" y="222">4 PDFs • 116 pages • 492 chunks</text>
+  <rect class="ibm" x="1250" y="158" width="270" height="95"/><circle cx="1285" cy="190" r="19" fill="#0f62fe"/><text class="iconText" x="1271" y="195">IBM</text><text class="brand" x="1315" y="190" fill="#0f62fe">IBM Cloud</text><text class="body" x="1275" y="222">5 PDFs • 766 pages • 2,551 chunks</text>
+
+  <path class="arrow" d="M795 253 L795 300"/>
+  <rect class="core" x="475" y="305" width="640" height="112"/>
+  <text class="label" x="505" y="340">2. Query + conversational rewrite</text>
+  <text class="body" x="505" y="369">User question → recent SQLite memory → standalone retrieval question</text>
+  <text class="body" x="505" y="394">Global • single provider • specific document • cross-provider comparison</text>
+
+  <path class="arrow" d="M795 417 L795 460"/>
+  <text class="section" x="70" y="500">3. Parallel hybrid retrieval</text>
+
+  <rect class="dense" x="120" y="525" width="650" height="235"/>
+  <circle cx="165" cy="566" r="22" fill="#10b981"/><text class="iconText" x="151" y="571">D</text>
+  <text class="label" x="205" y="558">Dense semantic retrieval</text>
+  <text class="body" x="205" y="584">SentenceTransformers all-MiniLM-L6-v2</text>
+  <text class="body" x="205" y="610">Normalized 384-d query vector</text>
+  <rect class="box" x="170" y="638" width="540" height="82"/>
+  <text class="label" x="200" y="669">Pinecone</text><text class="body" x="200" y="695">multicloud-rag-v12 / cloud-documents → Top 20 semantic candidates</text>
+
+  <rect class="sparse" x="1030" y="525" width="650" height="235"/>
+  <circle cx="1075" cy="566" r="22" fill="#8b5cf6"/><text class="iconText" x="1056" y="571">BM25</text>
+  <text class="label" x="1115" y="558">Sparse lexical retrieval</text>
+  <text class="body" x="1115" y="584">rank_bm25.BM25Okapi</text>
+  <text class="body" x="1115" y="610">Technical-token-aware regex tokenizer</text>
+  <rect class="box" x="1080" y="638" width="540" height="82"/>
+  <text class="label" x="1110" y="669">Local BM25 index</text><text class="body" x="1110" y="695">11,502 chunks → Top 20 keyword / identifier candidates</text>
+
+  <path class="arrow" d="M445 760 L445 805 L795 805 L795 845"/>
+  <path class="arrow" d="M1355 760 L1355 805 L805 805 L805 845"/>
+
+  <rect class="fusion" x="470" y="850" width="650" height="105"/>
+  <text class="label" x="500" y="886">4. Reciprocal Rank Fusion (RRF)</text>
+  <text class="body" x="500" y="914">score(d) = Σ 1 / (60 + rankᵣ(d)) • fuse dense + sparse without mixing raw score scales</text>
+  <text class="small" x="500" y="938">Fusion Top K = 25</text>
+
+  <path class="arrow" d="M795 955 L795 995"/>
+  <rect class="core" x="470" y="1000" width="650" height="118"/>
+  <text class="label" x="500" y="1035">5. Context improvement</text>
+  <text class="body" x="500" y="1063">Document-safe neighbors ±1 → deduplicate → low-information filtering</text>
+  <text class="body" x="500" y="1090">CrossEncoder ms-marco-MiniLM-L6-v2 → final Top 5 evidence chunks</text>
+
+  <path class="arrow" d="M795 1118 L795 1158"/>
+  <rect class="gen" x="470" y="1163" width="650" height="115"/>
+  <text class="label" x="500" y="1198">6. Grounded generation + citation integrity</text>
+  <text class="body" x="500" y="1226">Ollama qwen3:4b-instruct → neutral [SOURCE N] markers</text>
+  <text class="body" x="500" y="1253">Python validates and maps source → Provider | Document | PDF page</text>
+
+  <path class="arrow" d="M1120 1220 L1210 1220"/>
+  <rect class="store" x="1230" y="1145" width="500" height="150"/>
+  <text class="label" x="1260" y="1180">SQLite persistent memory</text>
+  <text class="body" x="1260" y="1208">Recent 12-message window</text>
+  <text class="body" x="1260" y="1236">Stores question • standalone rewrite • answer • evidence</text>
+  <text class="body" x="1260" y="1264">Conversation-aware follow-ups</text>
+
+  <path class="arrow" d="M795 1278 L795 1312"/>
+  <rect class="ui" x="470" y="1317" width="650" height="70"/>
+  <text class="label" x="500" y="1348">7. Streamlit production UI</text>
+  <text class="body" x="500" y="1373">Live token streaming • retrieval modes • evidence inspection • trusted citations</text>
+
+  <rect class="metric" x="70" y="1395" width="1660" height="18"/>
+</svg>
