@@ -17,7 +17,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 import numpy as np
 import requests
@@ -1517,6 +1517,7 @@ def stream_grounded_ollama_answer(
     question: str,
     evidence: list[dict[str, Any]],
     required_providers: list[str] | None = None,
+    token_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     prompt = build_grounded_prompt(question, evidence, required_providers)
     payload = {
@@ -1539,6 +1540,11 @@ def stream_grounded_ollama_answer(
                 if first_token is None:
                     first_token = time.perf_counter() - start
                 parts.append(text)
+
+                # Forward every Ollama streaming chunk immediately to the UI.
+                # The production Streamlit app uses this for visible live output.
+                if token_callback is not None:
+                    token_callback(text)
     return {
         "raw_answer": "".join(parts),
         "time_to_first_token": first_token,
@@ -1546,7 +1552,12 @@ def stream_grounded_ollama_answer(
     }
 
 
-def ask_v14(question: str, show_debug: bool = True, document_id: str | None = None) -> dict[str, Any]:
+def ask_v14(
+    question: str,
+    show_debug: bool = True,
+    document_id: str | None = None,
+    token_callback: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
     started = time.perf_counter()
     meta = parse_v14_query_metadata(question)
     quality = evaluate_v14_evidence_quality(question, document_id=document_id)
@@ -1642,6 +1653,7 @@ def ask_v14(question: str, show_debug: bool = True, document_id: str | None = No
         question,
         evidence,
         required_providers if len(required_providers) > 1 else None,
+        token_callback=token_callback,
     )
     raw_answer = stream["raw_answer"]
     source_numbers, invalid = validate_source_numbers(raw_answer, evidence)
@@ -1762,6 +1774,7 @@ def ask_v14_with_memory(
     providers: list[str] | None = None,
     document_id: str | None = None,
     show_debug: bool = True,
+    token_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     if mode == "document" and not document_id:
         raise ValueError("document_id is required when mode='document'.")
@@ -1770,7 +1783,12 @@ def ask_v14_with_memory(
     history = load_recent_memory(conversation_id, db_path)
     standalone = rewrite_followup_question(question, history)
     scoped = _apply_mode_scope(standalone, mode, provider, providers)
-    result = ask_v14(scoped, show_debug=show_debug, document_id=document_id)
+    result = ask_v14(
+        scoped,
+        show_debug=show_debug,
+        document_id=document_id,
+        token_callback=token_callback,
+    )
 
     save_message(
         conversation_id=conversation_id,
