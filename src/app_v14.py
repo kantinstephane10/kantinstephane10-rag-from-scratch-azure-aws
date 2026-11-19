@@ -271,7 +271,15 @@ if question:
         st.markdown(question)
 
     with st.chat_message("assistant"):
-        with st.spinner("Rewriting context, retrieving hybrid evidence, reranking, and validating citations..."):
+        # Live Ollama output appears here as soon as the first token arrives.
+        live_response = st.empty()
+        live_parts = []
+
+        def render_live_token(token):
+            live_parts.append(token)
+            live_response.markdown("".join(live_parts) + "▌")
+
+        with st.spinner("Rewriting context, retrieving hybrid evidence, and reranking..."):
             try:
                 result = ask_v14_with_memory(
                     conversation_id=current_id,
@@ -281,8 +289,10 @@ if question:
                     providers=selected_providers,
                     document_id=selected_document_id,
                     show_debug=False,
+                    token_callback=render_live_token,
                 )
             except Exception as exc:
+                live_response.empty()
                 st.error("The question could not be processed.")
                 st.exception(exc)
                 st.stop()
@@ -290,13 +300,15 @@ if question:
         quality = result.get("quality", {})
         status = quality.get("status", "unknown")
 
+        # Replace raw live [SOURCE N] markers with the validated final citations.
         if result.get("generation_skipped"):
+            live_response.empty()
             st.warning(result["answer"])
         elif result.get("citation_valid") is False:
             st.warning("The answer was generated, but citation validation did not fully pass.")
-            st.markdown(result["answer"])
+            live_response.markdown(result["answer"])
         else:
-            st.markdown(result["answer"])
+            live_response.markdown(result["answer"])
 
         col1, col2, col3 = st.columns(3)
         with col1:
