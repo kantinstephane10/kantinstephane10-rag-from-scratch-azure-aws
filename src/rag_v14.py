@@ -997,7 +997,8 @@ def _bm25_search(query: str, candidates: list[Any], top_k: int) -> list[tuple[st
     for local_pos in order:
         score = float(scores[int(local_pos)])
         if score <= 0:
-            continue        result.append((get_chunk_metadata(candidates[int(local_pos)])["chunk_id"], score))
+            continue
+        result.append((get_chunk_metadata(candidates[int(local_pos)])["chunk_id"], score))
     return result
 
 
