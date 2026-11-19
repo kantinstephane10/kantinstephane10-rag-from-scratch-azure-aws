@@ -1,0 +1,128 @@
+name: Sync V14 RAG source PDFs
+
+on:
+  push:
+    paths:
+      - ".github/workflows/sync-v14-rag-pdfs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-pdfs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Download validated V14 PDF corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          download_pdf() {
+            provider="$1"
+            file="$2"
+            url="$3"
+
+            mkdir -p "data/cloud_documents/$provider"
+            target="data/cloud_documents/$provider/$file"
+
+            echo "Downloading $provider/$file"
+
+            curl \
+              -L \
+              --fail \
+              --show-error \
+              --silent \
+              --retry 3 \
+              --retry-all-errors \
+              --connect-timeout 30 \
+              --max-time 300 \
+              --user-agent "Mozilla/5.0" \
+              "$url" \
+              -o "$target"
+
+            size="$(stat -c%s "$target")"
+            if [ "$size" -le 1024 ]; then
+              echo "ERROR: $target is too small ($size bytes)"
+              exit 1
+            fi
+
+            signature="$(head -c 5 "$target")"
+            if [ "$signature" != "%PDF-" ]; then
+              echo "ERROR: $target is not a valid PDF. Signature=$signature"
+              exit 1
+            fi
+
+            echo "PASS: $target ($size bytes)"
+          }
+
+          # AWS — 8 PDFs
+          download_pdf AWS AWS_Well_Architected_Framework.pdf "https://docs.aws.amazon.com/pdfs/wellarchitected/latest/framework/wellarchitected-framework.pdf"
+          download_pdf AWS AWS_Operational_Excellence_Pillar.pdf "https://docs.aws.amazon.com/pdfs/wellarchitected/latest/operational-excellence-pillar/wellarchitected-operational-excellence-pillar.pdf"
+          download_pdf AWS AWS_Security_Pillar.pdf "https://docs.aws.amazon.com/pdfs/wellarchitected/latest/security-pillar/wellarchitected-security-pillar.pdf"
+          download_pdf AWS AWS_Reliability_Pillar.pdf "https://docs.aws.amazon.com/pdfs/wellarchitected/latest/reliability-pillar/wellarchitected-reliability-pillar.pdf"
+          download_pdf AWS AWS_Performance_Efficiency_Pillar.pdf "https://docs.aws.amazon.com/pdfs/wellarchitected/latest/performance-efficiency-pillar/wellarchitected-performance-efficiency-pillar.pdf"
+          download_pdf AWS AWS_Cost_Optimization_Pillar.pdf "https://docs.aws.amazon.com/pdfs/wellarchitected/latest/cost-optimization-pillar/wellarchitected-cost-optimization-pillar.pdf"
+          download_pdf AWS AWS_Sustainability_Pillar.pdf "https://docs.aws.amazon.com/pdfs/wellarchitected/latest/sustainability-pillar/wellarchitected-sustainability-pillar.pdf"
+          download_pdf AWS AWS_Security_Reference_Architecture.pdf "https://docs.aws.amazon.com/pdfs/prescriptive-guidance/latest/security-reference-architecture/security-reference-architecture.pdf"
+
+          # Azure — 5 PDFs
+          download_pdf Azure Azure_Cloud_Native_Applications_Architecture.pdf "https://download.microsoft.com/download/9/a/8/9a8a312d-3d0e-4bbe-a9f7-511fb2ff54b5/Ebook%20-%20Designing%20high-quality%20distributed%20Cloud-Native%20applications%20on%20Azure%20-%20V1.1.pdf"
+          download_pdf Azure Azure_Achieve_Reliability.pdf "https://download.microsoft.com/download/9/5/d/95d6407f-d614-4f99-ad51-274a015f6135/Achieve-Reliability-for-your-Apps-and-Workloads-with-Azure_%28Jan_2022%29.pdf"
+          download_pdf Azure Azure_Enterprise_Scale_Landing_Zones.pdf "https://download.microsoft.com/download/8/6/7/8676f96b-5802-4cfd-8bda-ec6ae73d27dc/AAC_EnterpriseScale_GitHub.pdf"
+          download_pdf Azure Azure_Hybrid_Cloud_for_Enterprise_Architects.pdf "https://download.microsoft.com/download/c/6/2/c621c5f5-3f9e-4580-b1df-2597ec6e86ed/MSFT_cloud_architecture_hybrid.pdf"
+          download_pdf Azure Azure_Digital_Transformation_Cloud_Adoption.pdf "https://download.microsoft.com/download/0/c/3/0c37b409-7d5d-4e40-83f3-33e6e105932e/Whitepaper%20-%20%20Skyrocket%20digital%20transformation%20with%20Azure.pdf"
+
+          # GCP — 5 PDFs
+          download_pdf GCP GCP_Enterprise_Foundations_Blueprint.pdf "https://services.google.com/fh/files/misc/google-cloud-security-foundations-guide.pdf"
+          download_pdf GCP GCP_CISO_Guide_to_Security_Transformation.pdf "https://services.google.com/fh/files/misc/ciso-guide-to-security-transformation.pdf"
+          download_pdf GCP GCP_Infrastructure_Security_Design_Overview.pdf "https://services.google.com/fh/files/misc/google_infrastructure_security_design_overview.pdf"
+          download_pdf GCP GCP_Cloud_Trust_Whitepaper.pdf "https://services.google.com/fh/files/misc/072022_google_cloud_trust_whitepaper.pdf"
+          download_pdf GCP GCP_NISC_Security_Whitepaper.pdf "https://services.google.com/fh/files/misc/nisc_gcp_whitepaper_en.pdf"
+
+          # Oracle — 4 PDFs (the exact frozen V14 corpus)
+          download_pdf Oracle OCI_Security_Architecture.pdf "https://www.oracle.com/a/ocom/docs/oracle-cloud-infrastructure-security-architecture.pdf"
+          download_pdf Oracle OCI_Network_Routing_Examples.pdf "https://docs.oracle.com/en-us/iaas/Content/Resources/Assets/whitepapers/learn-routing-in-oci-networking-with-examples.pdf"
+          download_pdf Oracle OCI_Network_Firewall_Examples.pdf "https://docs.oracle.com/en-us/iaas/Content/Resources/Assets/whitepapers/learn-oci-network-firewall-with-examples.pdf"
+          download_pdf Oracle OCI_IAM_Best_Practices.pdf "https://docs.oracle.com/en-us/iaas/Content/Resources/Assets/whitepapers/best-practices-for-iam-on-oci.pdf"
+
+          # IBM — 5 PDFs
+          download_pdf IBM IBM_Hybrid_Cloud_on_Power11.pdf "https://www.redbooks.ibm.com/redpieces/pdfs/sg248594.pdf"
+          download_pdf IBM IBM_Deployable_Architectures_PowerVS.pdf "https://www.redbooks.ibm.com/redbooks/pdfs/sg248576.pdf"
+          download_pdf IBM IBM_Power_Cloud_Security_Guide.pdf "https://www.redbooks.ibm.com/redpapers/pdfs/redp5659.pdf"
+          download_pdf IBM IBM_Cloud_Object_Storage_System_Product_Guide.pdf "https://www.redbooks.ibm.com/redbooks/pdfs/sg248439.pdf"
+          download_pdf IBM IBM_Cloud_Object_Storage_Concepts_Architecture.pdf "https://www.redbooks.ibm.com/redpapers/pdfs/redp5537.pdf"
+
+          count="$(find data/cloud_documents -type f -name '*.pdf' | wc -l)"
+          echo "PDF count: $count"
+
+          if [ "$count" -ne 27 ]; then
+            echo "ERROR: expected exactly 27 V14 PDFs, found $count"
+            find data/cloud_documents -type f -name '*.pdf' | sort
+            exit 1
+          fi
+
+      - name: Commit source corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -f data/cloud_documents
+
+          if git diff --cached --quiet; then
+            echo "No PDF changes to commit."
+            exit 0
+          fi
+
+          git commit -m "data: add validated V14 multi-cloud PDF corpus"
+          git push origin "HEAD:${{ github.ref_name }}"
