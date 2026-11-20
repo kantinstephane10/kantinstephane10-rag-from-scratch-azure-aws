@@ -182,7 +182,7 @@ $('token-usage').textContent=`GPT API usage: ${usage.call_count} recorded reques
  if(!data.messages.length){
   root.append(mk('p',{class:'muted'},'No agent work yet. Start the project to queue the Product Manager.'));
   $('activity-detail').textContent='No task selected.';
-  $('ask-worker').disabled=true;$('cancel-task').disabled=true;
+  $('ask-worker').disabled=true;$('cancel-task').disabled=true;$('retry-task').disabled=true;
   updateBulkSelectionUI();return;
  }
  if(!state.selectedTask||!data.messages.some(x=>x.id===state.selectedTask))state.selectedTask=data.messages[0].id;
@@ -211,6 +211,7 @@ Agent response:
 ${task.reply||'Not yet available'}${errorDetails}${cancelDetails}`;
  $('ask-worker').disabled=false;
  $('cancel-task').disabled=!ACTIVE_TASK_STATES.has(task.status);
+ $('retry-task').disabled=task.status!=='failed';
  updateBulkSelectionUI();
 }
 async function refreshRagStatus(){
@@ -431,6 +432,16 @@ function bind(){
   if(!state.selectedTaskIds.size)return;
   openCancelDialog('bulk', {title:`Cancel ${state.selectedTaskIds.size} selected tasks?`,
    description:'Only the checked unfinished tasks in this project will be cancelled. Completed tasks remain unchanged.',reasonRequired:true});
+ });
+ $('retry-task').addEventListener('click',async()=>{
+  const task=state.activity?.messages?.find(x=>x.id===state.selectedTask);
+  if(!task||task.status!=='failed')return;
+  $('retry-task').disabled=true;
+  try{
+   await post(`/api/projects/${state.projectSelected}/retry`,{message_id:task.id});
+   await refreshActivity();
+   alertMessage('Failed task requeued. A live GPT retry may incur another API charge.');
+  }catch(e){alertMessage(e.message);await refreshActivity().catch(()=>{});}
  });
  $('cancel-task').addEventListener('click',()=>{
   const task=state.activity?.messages?.find(x=>x.id===state.selectedTask);if(!task)return;
