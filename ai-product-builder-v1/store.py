@@ -37,6 +37,10 @@ class Store:
         init_handoffs(self)
         from meetings import init_meetings
         init_meetings(self)
+        from execution_workspace import init_workspace
+        init_workspace(self)
+        from release_management import init_releases
+        init_releases(self)
 
     @contextmanager
     def db(self):
@@ -403,6 +407,18 @@ class Store:
             if needs_human:
                 db.execute("UPDATE projects SET status='awaiting_human' WHERE id=?",(row["project_id"],))
             return True
+
+    def append_worker_receipt(self, mid, pid, role, notes):
+        """Append server-verified source receipts after a completed GPT turn."""
+        if not notes:return
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT status FROM messages WHERE id=? AND project_id=?',(mid,pid)).fetchone()
+            if not row or row['status']!='done':
+                raise StoreError('Only completed tasks can receive execution receipts.')
+            message='\n\n[Workspace receipt: '+' '.join(notes)[:5000]+']'
+            db.execute('UPDATE messages SET reply=reply||? WHERE id=?',(message,mid))
+            self._event(db,pid,'workspace_receipt',role,{'task_id':mid,'notes':notes[:8]})
 
     def failure(self,mid,error,*,retryable,max_attempts=3):
         with self.db() as db:

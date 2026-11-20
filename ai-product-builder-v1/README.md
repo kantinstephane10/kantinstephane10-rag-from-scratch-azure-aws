@@ -4,6 +4,21 @@ A local **AI Agent / Agentic AI / RAG Product Builder control-plane prototype** 
 
 **Scope:** This app manages project intake, planning via OpenAI, specialist messaging, documented handoffs, meetings, cancellation, artifact uploads and review. It is **not** a finished autonomous code-writing/testing/deployment factory. An `agent replied` receipt is not proof of source files built, tests executed, LangChain/LangGraph installed, or a production RAG deployed. Do not authorize a release based only on generated text.
 
+
+## V1.6.1 — Unattended Python on the Windows host
+
+**Agent-generated Python now runs automatically with no per-script approval or project-name confirmation.** The local worker persists execution requests in SQLite, compiles newly written Python, runs entrypoints (`app.py`, `main.py`, `server.py`, `run.py` or files with `__main__`), runs discovered unittest suites for new tests, and executes additional project-local `.py` files / `unittest`, `pytest`, `compile` when agents explicitly request them. Other source modules are compiled and exercised when imported by entrypoints or tests; they are not incorrectly launched as standalone applications.
+
+- Each workspace has **automatic execution ON** by default. Use **Pause automatic Python**, **Resume automatic Python**, or **Stop running / cancel queued jobs** in the Project code workspace. These are operational controls, not approval prompts.
+- The server starts a dedicated auto-run worker and resumes pending jobs after restart. Each job is tied to a source-content fingerprint, preventing later unreviewed revisions being executed under old receipts. Duplicate revision/command pairs are not rerun; results record exit codes and terminal statuses.
+- Windows Python runs through the same interpreter used to launch `server.py`. Runtime subprocesses are stopped on cancellation or timeout, output is bounded, and the child environment omits inherited API keys. **This does not isolate files, OS credentials, process execution, or outbound network**. Scripts can still access anything the Windows account can.
+- The app remains localhost-only for Windows runs. In opt-in multiuser mode, an administrator must control auto-execution and workspace file writes when auto-execution is on, to prevent an ordinary editor from escalating privileges. **There is no per-script permission prompt.**
+- This is an explicitly unsafe/trusted-code operating mode. Use a dedicated, non-admin Windows account and a machine without sensitive files or credentials. Uploaded documents can contain prompt injection that alters generated code. Do not expose this application to the internet.
+- Approval for **public releases and protected deployment operations** is separate and remains required.
+
+Run tests: `python -m unittest discover -s tests -v`. Windows-native execution and Windows subprocess-tree termination still require verification on the actual Windows host; Linux tests do not certify it.
+
+
 ## Run directly from GitHub (Windows PowerShell)
 
 If you already cloned `kantinstephane10/kantinstephane10-rag-from-scratch-azure-aws` using `--single-branch`:

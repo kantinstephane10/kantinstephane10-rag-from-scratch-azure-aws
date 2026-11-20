@@ -157,6 +157,32 @@
   <div class="website-preview"><div class="website-preview-head"><strong>Local website preview</strong><span class="small-muted">Script-disabled sandbox · Home / About / Contact</span></div><iframe id="website-iframe" title="Website preview" sandbox="" loading="lazy"></iframe></div>
   <p class="rag-caution">Generated websites are local static files. Forms are not connected to email or a database. Public hosting, domain/DNS, authentication, analytics, privacy policy and deployment approval are separate production tasks.</p>
 </section>
+
+<section class="panel workspace-panel" id="workspace-panel" hidden aria-label="Windows Python execution workspace">
+ <div class="side-panel-title"><div><h3>Project code workspace · Windows Python</h3><p class="muted">Save real Python source, run tests through your Windows Python installation, and inspect execution evidence.</p></div><button type="button" class="secondary" id="workspace-refresh">Refresh files and runs</button></div>
+ <p id="workspace-interpreter" class="muted small-muted">Python interpreter: checking …</p>
+ <div class="workspace-flex">
+  <div><h4>Source editor</h4><label>Relative source filename<input type="text" id="workspace-filename" value="app.py" maxlength="160" placeholder="app.py or tests/test_app.py"></label>
+  <label>Python or supported source code<textarea id="workspace-content" rows="11" spellcheck="false" placeholder="print('Hello from my Windows workspace')"></textarea></label>
+  <div class="website-actions"><button type="button" class="primary" id="workspace-save">Save source file</button><button type="button" class="secondary" id="workspace-load">Load selected file</button></div>
+  <p class="small-muted">Updates require the current file SHA-256 to prevent overwriting another worker's changes.</p></div>
+  <div><h4>Files and verified runs</h4><div class="ledger-items" id="workspace-file-list">No files yet.</div><h4>Run Python on this Windows computer</h4>
+   <label>Run mode<select id="workspace-command"><option value="script">Run a .py file</option><option value="unittest">Run unittest discovery</option><option value="pytest">Run pytest</option><option value="compile">Compile project Python</option></select></label>
+   <label>Python file (for script mode)<input id="workspace-run-file" value="app.py" placeholder="app.py"></label>
+   <button type="button" class="danger" id="workspace-run">Run on Windows Python</button>
+   <div class="website-actions"><button type="button" class="secondary" id="workspace-auto-toggle">Pause unattended Windows Python</button><button type="button" class="danger" id="workspace-auto-cancel">Stop running / cancel queued jobs</button></div>
+   <p id="workspace-auto-status" class="small-muted">Unattended Windows Python is enabled by default.</p>
+   <div class="ledger-items" id="workspace-auto-list">No automatic jobs yet.</div>
+   <p class="rag-caution"><b>Security warning:</b> Agent-generated Python runs automatically with the full access of your Windows account. No per-script approval, no sandbox. Uploaded documents or prompts could influence generated code; scripts can read, change or delete local files, make network calls, or install packages. Use a dedicated low-privilege Windows account.</p>
+   <h4>Execution results</h4><pre class="activity-detail workspace-output" id="workspace-run-output">No run yet.</pre><div class="ledger-items" id="workspace-run-list"></div>
+  </div>
+ </div>
+</section>
+<section class="panel release-panel" id="release-panel" hidden aria-label="Controlled website release staging">
+ <div class="side-panel-title"><div><h3>Human-approved local release</h3><p class="muted">Prepare a website release, approve the exact version, and stage static files locally. This does not publish to the internet.</p></div><button id="release-refresh" class="secondary" type="button">Refresh releases</button></div>
+ <div class="website-actions"><button id="release-prepare" type="button" class="primary">Prepare release</button><input id="release-confirm" type="text" placeholder="Exact project name to approve" aria-label="Release confirmation"><button type="button" class="secondary" id="release-approve">Approve selected release</button><button type="button" class="secondary" id="release-stage">Stage approved release</button></div>
+ <div id="release-items" class="ledger-items">No releases prepared.</div><p id="release-status" class="small-muted"></p>
+</section>
 <div class="panel live-work" id="project-live" hidden>
 <div class="side-panel-title"><h3 id="live-title">Agent work sequence</h3><div class="worker-actions"><button id="refresh-activity" class="text-btn" type="button">Refresh live</button><button id="select-all-queued" class="secondary" type="button" disabled>Select all queued</button><button id="clear-task-selection" class="secondary" type="button" disabled>Clear selection</button><button id="cancel-selected-tasks" class="danger" type="button" disabled>Cancel selected (0)</button></div></div>
 <div class="live-progress"><div id="work-progress" class="live-progress-bar"></div></div><div id="work-stats" class="muted small-muted">No work queued.</div><div id="token-usage" class="muted small-muted">No recorded GPT usage yet.</div>
@@ -214,5 +240,12 @@
       <div class="dialog-footer"><button class="secondary" type="button" id="cancel-dialog-dismiss">Keep working</button><button class="danger" id="cancel-confirm" type="submit">Confirm cancellation</button></div>
     </form>
   </div>
+</div>
+
+<div id="login-screen" class="login-screen" hidden>
+ <form id="login-form" class="login-card"><h2>Sign in to AI Product Builder</h2><p>Multiuser mode protects projects with user sessions and roles.</p>
+ <label>Username<input id="login-user" autocomplete="username" required></label>
+ <label>Password<input id="login-password" type="password" autocomplete="current-password" required></label>
+ <button class="primary" type="submit">Sign in</button><p id="login-error" role="alert"></p></form>
 </div>
 </body></html>
