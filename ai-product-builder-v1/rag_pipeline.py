@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from handoffs import artifacts, read_artifact
+from handoffs import artifacts, read_artifact, artifact_file
 from store import StoreError
 
 EMBEDDING_MODEL = 'text-embedding-3-small'
@@ -81,6 +81,39 @@ def _extract(name, raw):
         return [(None,content.strip())] if content.strip() else []
     return []
 
+
+
+def _extract_file(name,path):
+    """Index a verified file without materializing 1 GiB of bytes in memory."""
+    suffix=Path(name).suffix.lower()
+    if suffix=='.pdf':
+        try:import pymupdf
+        except ImportError as exc:raise StoreError('PDF reader missing; install requirements-rag.txt.') from exc
+        try:
+            with pymupdf.open(str(path)) as doc:
+                if doc.needs_pass:raise StoreError(f'{name}: encrypted PDF.')
+                if doc.page_count>MAX_PDF_PAGES:
+                    raise StoreError(f'{name}: exceeds {MAX_PDF_PAGES} pages for one index build.')
+                pages=[];total=0
+                for i,page in enumerate(doc):
+                    text=page.get_text('text',sort=True).strip()
+                    total+=len(text)
+                    if total>MAX_EXTRACTED_CHARS:
+                        raise StoreError(f'{name}: text exceeds {MAX_EXTRACTED_CHARS} characters; split the corpus.')
+                    if text:pages.append((i+1,text))
+                if not pages:raise StoreError(f'{name}: no readable PDF text; OCR is not installed.')
+                return pages
+        except StoreError:raise
+        except (ValueError,RuntimeError,OSError) as exc:
+            raise StoreError(f'{name}: unable to read PDF ({type(exc).__name__}).') from exc
+    if suffix in {'.txt','.md','.csv'}:
+        # Only the bounded, supported amount of text is read into RAM.
+        with path.open('rb') as source:
+            raw=source.read(MAX_EXTRACTED_CHARS*4+1)
+            if source.read(1):
+                raise StoreError(f'{name}: larger than the indexed-text limit. Upload accepted, indexing requires splitting.')
+        return _extract(name,raw)
+    return []
 
 def _splitter():
     try:
@@ -164,8 +197,8 @@ def build_index(store,pid,key,*,embedder=None,splitter=None):
     split=splitter if splitter is not None else _splitter()
     for asset in artifacts(store,pid):
         if Path(asset['name']).suffix.lower() not in SUPPORTED:continue
-        meta,raw=read_artifact(store,pid,asset['id'])
-        pages=_extract(meta['name'],raw)
+        meta,path=artifact_file(store,pid,asset['id'])
+        pages=_extract_file(meta['name'],path)
         count=0
         for physical_page,content in pages:
             for part in split.split_text(content):
@@ -207,7 +240,7 @@ def build_index(store,pid,key,*,embedder=None,splitter=None):
             cur=db.execute('SELECT sha256 FROM artifacts WHERE id=? AND project_id=?',(doc['artifact_id'],pid)).fetchone()
             if not cur or cur['sha256']!=doc['sha256']:
                 raise StoreError('Uploaded documents changed during indexing; existing index kept.')
-            read_artifact(store,pid,doc['artifact_id'])  # verify disk bytes, not only database metadata
+            artifact_file(store,pid,doc['artifact_id'])  # verify bytes in bounded-memory chunks
         db.execute('DELETE FROM rag_chunks WHERE project_id=?',(pid,))
         db.executemany('''INSERT INTO rag_chunks(id,project_id,artifact_id,filename,page_number,chunk_index,text,embedding_json,sha256)
                      VALUES (?,?,?,?,?,?,?,?,?)''',[(c['id'],pid,c['artifact_id'],c['filename'],c['page_number'],c['chunk_index'],c['text'],json.dumps(v),c['sha256']) for c,v in zip(chunks,vectors)])

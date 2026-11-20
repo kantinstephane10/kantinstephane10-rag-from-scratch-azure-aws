@@ -73,11 +73,14 @@ class BusinessAnalystWorkflowTests(unittest.TestCase):
         self.assertIn('Unavailable provider',review[0]['error'])
         self.assertEqual(review[1]['status'],'done')
 
-    def test_kickoff_is_atomic_for_excessive_briefs(self):
+    def test_long_brief_kickoff_references_full_context_without_copying(self):
         pid=self.store.create_project('Long project','X'*20000)['id']
-        with self.assertRaises(StoreError):self.engine.kickoff(pid)
-        self.assertEqual(self.store.activity(pid)['counts']['total'],0)
-        self.assertEqual(self.store.project(pid)['status'],'draft')
+        self.engine.kickoff(pid)
+        tasks=self.store.activity(pid)['messages']
+        self.assertEqual(len(tasks),3)
+        self.assertTrue(all(len(task['body'])<6000 for task in tasks))
+        self.engine.process_once()
+        self.assertEqual(len(self.client.calls[0]['context']['project']['brief']),20000)
 
     def test_schema_survives_restart(self):
         self.engine.kickoff(self.pid)

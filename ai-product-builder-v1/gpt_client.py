@@ -22,13 +22,22 @@ RESPONSE_SCHEMA = {
                       "required": ["recipient", "message"], "additionalProperties": False},
         },
         "needs_human": {"type": "boolean"},
+        "file_requests": {
+            "type": "array", "items": {"type": "object", "properties": {
+                "artifact_id": {"type": "string"},
+                "page": {"type": ["integer", "null"]},
+                "offset": {"type": "integer"},
+                "query": {"type": "string"}},
+                "required": ["artifact_id", "page", "offset", "query"],
+                "additionalProperties": False},
+        },
         "meeting_requests": {
             "type": "array", "items": {"type": "object",
                 "properties": {"topic": {"type": "string"},
                                "attendees": {"type": "array", "items": {"type": "string"}}},
                 "required": ["topic", "attendees"], "additionalProperties": False}},
     },
-    "required": ["reply", "outgoing", "needs_human", "meeting_requests"],
+    "required": ["reply", "outgoing", "needs_human", "meeting_requests", "file_requests"],
     "additionalProperties": False,
 }
 
@@ -48,8 +57,15 @@ def parse_response(data):
     if (not isinstance(obj, dict) or not isinstance(obj.get("reply"), str)
         or not isinstance(obj.get("needs_human"), bool)
         or not isinstance(obj.get("outgoing"), list)
-        or not isinstance(obj.get("meeting_requests"), list)):
+        or not isinstance(obj.get("meeting_requests"), list)
+        or not isinstance(obj.get("file_requests",[]),list)):
         raise ModelError("GPT response does not match the required fields.")
+    for request in obj.get("file_requests",[]):
+        if (not isinstance(request,dict) or not isinstance(request.get('artifact_id'),str)
+            or not isinstance(request.get('offset'),int)
+            or not isinstance(request.get('query'),str)
+            or request.get('page') is not None and not isinstance(request['page'],int)):
+            raise ModelError('GPT file request is malformed.')
     for msg in obj["outgoing"]:
         if not isinstance(msg, dict) or not isinstance(msg.get("recipient"), str) or not isinstance(msg.get("message"), str):
             raise ModelError("GPT outgoing message is malformed.")
@@ -107,4 +123,4 @@ class DemoClient:
         else:
             message = (f"[OFFLINE DEMO — NOT GPT] {role}: received '{question[:140]}'. "
                        "Proposed next step: validate requirements and produce reviewable evidence.")
-        return {"reply": message, "outgoing": [], "needs_human": False, "meeting_requests": []}
+        return {"reply": message, "outgoing": [], "needs_human": False, "meeting_requests": [], "file_requests": []}

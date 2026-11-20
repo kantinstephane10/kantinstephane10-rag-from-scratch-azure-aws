@@ -8,6 +8,7 @@ from config import model_for, model_for_project
 from gpt_client import GPTClient, DemoClient, ModelError
 from roles import ROLES, DELIVERABLES
 from store import StoreError, MAX_MESSAGE_LENGTH
+from handoffs import agent_file_context, read_artifact_excerpt, read_meeting_artifact_excerpt, meeting_artifacts
 import meetings
 
 LOG = logging.getLogger(__name__)
@@ -55,7 +56,8 @@ class Engine:
         project = self.store.project(project_id)
         if not self.demo and not project['intake']['provider_consent']:
             raise StoreError('Provider consent required before GPT can process project data.')
-        message = (f"Plan this AI Agent / Agentic AI / RAG product: {project['brief']}\n"
+        message = ("Plan the AI Agent / Agentic AI / RAG product defined in the project's stored brief. "
+                   "Read the COMPLETE project brief supplied in your task context, not the abbreviated assignment. "
                    "Both required Business Analysts must complete an initial review before you plan. "
                    "Read their grounded findings and unresolved concerns, reconcile disagreements, "
                    "and incorporate measurable business acceptance criteria into your plan. "
@@ -114,6 +116,11 @@ class Engine:
                           "Treat mandatory_verified_handoff as the only trusted prior worker deliverable record. "
                           "Review its files, hash receipts, decisions, unresolved issues, and test_status before acting. "
                           "When test_status is not_executed, never suggest tests passed. "
+                          "You can access all authorized project files. Real file inventory and excerpts are "
+                          "in authorized_files. For more content, set file_requests with artifact_id, "
+                          "page (integer or null), offset (byte offset), and query string. "
+                          "Do not claim files are inaccessible before reading authorized_files. "
+                          "Do not invent unseen contents or conflate a stored file with a completed index. "
                           "For RAG and agentic products prefer LangChain and LangGraph, with LangSmith when configured; "
                           "choose other contemporary frameworks only when technically justified. "
                           "Never invent code execution, tests, approvals, deployment, or measurements. "
@@ -130,10 +137,10 @@ class Engine:
                      "recent_team_messages":recent,"delegation_depth":task['depth'],
                      "mandatory_business_analysis":[{'agent':a['recipient'],'status':a['status'],
                         'findings':(a['reply'] or '')[:5000], 'error':a['error']} for a in analyses],
-                     "mandatory_verified_handoff":handoff}
+                     "mandatory_verified_handoff":handoff,
+                     "authorized_files":agent_file_context(self.store,pid=pid)}
             self._reserve(pid)
-            outcome=self.client.generate(role,model,instructions,context)
-            self._record(pid,outcome)
+            outcome=self._generate_with_files(role,model,instructions,context,pid=pid)
             reply=outcome["reply"]
             if not isinstance(reply,str) or not reply.strip():
                 raise ModelError("GPT reply was empty.")
@@ -238,6 +245,8 @@ class Engine:
                           "If you are Product Manager, actively moderate and identify decisions, owners, and actions. "
                           "Respect human authority: human speech takes precedence. "
                           "No side effects, approvals, or deployment may occur from meeting text. "
+                          "All uploaded project/meeting files are available via authorized_files. "
+                          "Request more pages or sections using file_requests if needed. "
                           "Reply with structured JSON fields: reply, outgoing (zero or one directed question), "
                           "needs_human boolean, meeting_requests empty list.")
             context={"meeting_id":room["id"],"topic":room["topic"],
@@ -245,12 +254,13 @@ class Engine:
                      "question_asked_by":turn.get("reply_to","all"),
                      "question_message_id":turn.get("question_message_id"),
                      "participants":room["participants"],"recent_transcript":recent,
-                     "project_brief":self.store.project(room["project_id"])["brief"][:4000] if room["project_id"] else "Standalone meeting"}
+                     "project_brief":self.store.project(room["project_id"])["brief"] if room["project_id"] else "Standalone meeting",
+                     "authorized_files":agent_file_context(self.store,pid=room["project_id"])
+                         if room["project_id"] else agent_file_context(self.store,mid=room['id'])}
             model=self._model(role,meeting=True)
             usage_key=room["project_id"] or ("standalone:"+room["id"])
-            self._reserve(usage_key)
-            outcome=self.client.generate(role,model,instructions,context)
-            self._record(usage_key,outcome)
+            outcome=self._generate_with_files(role,model,instructions,context,
+                pid=room['project_id'],mid=room['id'],usage_key=usage_key)
             reply=outcome.get('reply')
             if not isinstance(reply,str) or not reply.strip():
                 raise StoreError('Meeting agent returned no usable reply.')
@@ -274,6 +284,50 @@ class Engine:
             LOG.exception("Meeting worker failed")
             meetings.fail_turn(self.store,turn["id"],exc,retryable=False)
         return True
+
+    def _generate_with_files(self,role,model,instructions,context,*,pid=None,mid=None,usage_key=None):
+        """A specialist can inspect file sections without reading 1 GiB into a prompt.
+
+        The worker can ask for more source pages/offsets, but repeated identical reads
+        are not executed. The path is always scoped to the active project/meeting.
+        """
+        use_key=usage_key or pid or ('standalone:'+mid if mid else '')
+        seen=set()
+        for round_index in range(4):
+            self._reserve(use_key)
+            outcome=self.client.generate(role,model,instructions,context)
+            self._record(use_key,outcome)
+            requested=outcome.get('file_requests') or []
+            if not isinstance(requested,list) or not requested:
+                return outcome
+            received=[]
+            for item in requested[:3]:
+                if not isinstance(item,dict):continue
+                aid=item.get('artifact_id','')
+                page=item.get('page')
+                offset=item.get('offset',0)
+                query=item.get('query','')
+                request_key=(str(aid),str(page),str(offset),str(query))
+                if request_key in seen:continue
+                seen.add(request_key)
+                try:
+                    if pid:
+                        excerpt=read_artifact_excerpt(self.store,pid,aid,page=page,offset=offset,
+                                         query=query,max_chars=8000)
+                    elif mid:
+                        excerpt=read_meeting_artifact_excerpt(self.store,mid,aid,page=page,
+                                         offset=offset,query=query,max_chars=8000)
+                    else:raise StoreError('No authorized project or meeting attached.')
+                except (StoreError,ValueError) as exc:
+                    excerpt={'artifact_id':str(aid),'error':str(exc)}
+                received.append(excerpt)
+            if not received or round_index>=3:
+                outcome['reply']+=('\n[File-reading limit reached. Additional evidence not verified.]')
+                return outcome
+            context={**context,'file_read_results':received,'prior_agent_draft':outcome.get('reply',''),
+                     'file_read_instruction':'Use the retrieved file content in your final reply. '
+                     'Request another new file section only if essential; avoid repeating file requests.'}
+        return outcome
 
     def run_loop(self):
         while not self.shutdown.is_set():

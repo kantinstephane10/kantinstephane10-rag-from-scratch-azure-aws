@@ -24,12 +24,14 @@ from meetings import (create_meeting, meeting, list_meetings, start_meeting,
                       take_floor, yield_floor, end_meeting, cancel_meeting)
 from roles import ROLES
 from store import Store, StoreError
-from handoffs import save_artifact, artifacts, list_handoffs, read_artifact
+from handoffs import (save_artifact, save_artifact_stream, save_meeting_artifact_stream,
+    artifacts, meeting_artifacts, list_handoffs, read_artifact_excerpt, read_meeting_artifact_excerpt,
+    MAX_ARTIFACT_BYTES)
 from rag_pipeline import init_rag,rag_status,start_index_job,answer_question
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger(__name__)
-MAX_POST = 11_500_000  # 8 MiB attachment after base64 JSON encoding
+MAX_POST = 11_500_000  # Legacy JSON payloads; up to 1 GiB uses streaming PUT instead
 
 
 def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtime=None):
@@ -119,6 +121,54 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                 LOG.exception('API failure')
                 self._json(500,{'error':'Internal server error; see server logs.'})
 
+        def _origin_ok(self):
+            origin=self.headers.get('Origin')
+            if origin:
+                parsed=urlparse(origin)
+                expected=self.headers.get('Host','')
+                if parsed.scheme not in ('http','https') or parsed.netloc.lower()!=expected.lower():
+                    self._json(403,{'error':'Cross-origin writes are not permitted.'})
+                    return False
+            return True
+
+        def do_PUT(self):
+            if not self._authorized() or not self._origin_ok():return
+            # A 1 GiB upload must have a known length. Never accept indefinite streams.
+            if self.headers.get('Transfer-Encoding'):
+                self._json(400,{'error':'Transfer encoding is not supported for file uploads.'})
+                return
+            try:
+                length=int(self.headers.get('Content-Length',''))
+            except (TypeError,ValueError):
+                self._json(411,{'error':'File upload requires Content-Length.'})
+                return
+            if not 1<=length<=MAX_ARTIFACT_BYTES:
+                self._json(413,{'error':'File must be between 1 byte and 1 GiB.'})
+                self.close_connection=True
+                return
+            parsed=urlparse(self.path);path=parsed.path
+            params=parse_qs(parsed.query,keep_blank_values=True)
+            filename=params.get('name',[''])[0]
+            try:
+                self.connection.settimeout(600)
+                if re.fullmatch(r'/api/projects/[a-f0-9]{12}/artifacts/upload',path):
+                    pid=path.split('/')[3]
+                    result=save_artifact_stream(store,pid,filename,self.rfile,length)
+                elif re.fullmatch(r'/api/meetings/[a-f0-9]{12}/artifacts/upload',path):
+                    mid=path.split('/')[3]
+                    result=save_meeting_artifact_stream(store,mid,filename,self.rfile,length)
+                else:
+                    self._json(404,{'error':'Upload endpoint not found.'})
+                    self.close_connection=True
+                    return
+                self._json(201,result)
+            except (TimeoutError,ConnectionError,OSError) as exc:
+                self.close_connection=True
+                self._handle_error(StoreError('File upload was interrupted; retry.'))
+            except Exception as exc:
+                self.close_connection=True
+                self._handle_error(exc)
+
         def do_GET(self):
             if not self._authorized(): return
             url=urlparse(self.path); path=url.path
@@ -140,6 +190,25 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                 elif path=='/api/projects': self._json(200,{'projects':store.projects()})
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/rag/status',path):
                     self._json(200,rag_status(store,path.split('/')[3]))
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/artifacts/[a-f0-9]{32}/text',path):
+                    if not is_loopback: raise StoreError('File text access requires the local UI.')
+                    parts=path.split('/');pid,aid=parts[3],parts[5]
+                    q=parse_qs(url.query)
+                    page=int(q['page'][0]) if q.get('page') else None
+                    offset=int(q.get('offset',['0'])[0])
+                    self._json(200,read_artifact_excerpt(store,pid,aid,page=page,offset=offset,
+                        query=q.get('query',[''])[0]))
+                elif re.fullmatch(r'/api/meetings/[a-f0-9]{12}/artifacts/[a-f0-9]{32}/text',path):
+                    if not is_loopback: raise StoreError('File text access requires the local UI.')
+                    parts=path.split('/');mid,aid=parts[3],parts[5]
+                    q=parse_qs(url.query)
+                    page=int(q['page'][0]) if q.get('page') else None
+                    offset=int(q.get('offset',['0'])[0])
+                    self._json(200,read_meeting_artifact_excerpt(store,mid,aid,page=page,offset=offset,
+                        query=q.get('query',[''])[0]))
+                elif re.fullmatch(r'/api/meetings/[a-f0-9]{12}/artifacts',path):
+                    mid=path.split('/')[3]
+                    self._json(200,{'artifacts':meeting_artifacts(store,mid)})
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/artifacts',path):
                     pid=path.split('/')[3]
                     self._json(200,{'artifacts':artifacts(store,pid)})
@@ -166,14 +235,7 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
 
         def do_POST(self):
             if not self._authorized(): return
-            origin=self.headers.get('Origin')
-            if origin:
-                parsed=urlparse(origin)
-                # Prevent a malicious web page from issuing state-changing requests to localhost.
-                expected=self.headers.get('Host','')
-                if parsed.scheme not in ('http','https') or parsed.netloc.lower()!=expected.lower():
-                    self._json(403,{'error':'Cross-origin writes are not permitted.'})
-                    return
+            if not self._origin_ok():return
             path=urlparse(self.path).path
             try:
                 data=self._body()
@@ -206,6 +268,25 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/delete',path):
                     pid=path.split('/')[3]
                     self._json(200,store.delete_project(pid,data.get('confirmation')))
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/artifacts/[a-f0-9]{32}/text',path):
+                    if not is_loopback: raise StoreError('File text access requires the local UI.')
+                    parts=path.split('/');pid,aid=parts[3],parts[5]
+                    q=parse_qs(url.query)
+                    page=int(q['page'][0]) if q.get('page') else None
+                    offset=int(q.get('offset',['0'])[0])
+                    self._json(200,read_artifact_excerpt(store,pid,aid,page=page,offset=offset,
+                        query=q.get('query',[''])[0]))
+                elif re.fullmatch(r'/api/meetings/[a-f0-9]{12}/artifacts/[a-f0-9]{32}/text',path):
+                    if not is_loopback: raise StoreError('File text access requires the local UI.')
+                    parts=path.split('/');mid,aid=parts[3],parts[5]
+                    q=parse_qs(url.query)
+                    page=int(q['page'][0]) if q.get('page') else None
+                    offset=int(q.get('offset',['0'])[0])
+                    self._json(200,read_meeting_artifact_excerpt(store,mid,aid,page=page,offset=offset,
+                        query=q.get('query',[''])[0]))
+                elif re.fullmatch(r'/api/meetings/[a-f0-9]{12}/artifacts',path):
+                    mid=path.split('/')[3]
+                    self._json(200,{'artifacts':meeting_artifacts(store,mid)})
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/artifacts',path):
                     pid=path.split('/')[3]
                     try: raw=base64.b64decode(data.get('base64',''),validate=True)

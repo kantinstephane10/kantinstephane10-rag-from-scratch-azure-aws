@@ -140,7 +140,18 @@ function renderProjects(){
   item.addEventListener('click',async()=>{state.projectSelected=project.id;state.selectedTask=null;state.selectedTaskIds.clear();renderProjects();await refreshActivity();await refreshRagStatus();});
   const del=mk('button',{class:'danger project-delete-button',type:'button','aria-label':'Delete project '+project.name},'Delete');
   del.addEventListener('click',()=>openDeleteDialog(project));
-  entry.append(item,del);root.append(entry);
+  entry.append(item);
+  if(project.status==='draft'){
+   const start=mk('button',{class:'secondary project-start-button',type:'button'},'Start agents');
+   start.addEventListener('click',async()=>{
+    start.disabled=true;
+    try{await post(`/api/projects/${project.id}/kickoff`,{});await refreshProjects();
+      alertMessage('Both Business Analysts and the Product Manager were queued.');}
+    catch(e){alertMessage(e.message);start.disabled=false;}
+   });
+   entry.append(start);
+  }
+  entry.append(del);root.append(entry);
  }
  fillSelect($('meeting-project'),state.projects.map(p=>[p.id,p.name]),['','Standalone meeting']);
 }
@@ -257,13 +268,13 @@ async function submitDeleteProject(e){
 async function uploadRagDocuments(){
  const pid=state.projectSelected;const files=[...$('rag-files').files];
  if(!pid||!files.length){alertMessage('Choose a project and documents first.');return;}
- if(files.some(f=>f.size<1||f.size>8*1024*1024)){alertMessage('Each file must be between 1 byte and 8 MiB.');return;}
+ if(files.some(f=>f.size<1||f.size>MAX_FILE_SIZE)){alertMessage('Each file must be between 1 byte and 1 GiB.');return;}
  $('rag-upload').disabled=true;
  try{
-  for(const file of files){await post(`/api/projects/${pid}/artifacts`,{name:file.name,base64:await fileToBase64(file)})}
+  for(const file of files){await uploadFile(`/api/projects/${pid}/artifacts/upload`,file,t=>$('rag-upload-progress').textContent=t)}
   $('rag-files').value='';await refreshRagStatus();
   alertMessage(`${files.length} documents uploaded. Rebuild the index to include them.`);
- }catch(err){alertMessage(err.message)}finally{$('rag-upload').disabled=false}
+ }catch(err){alertMessage(err.message)}finally{$('rag-upload').disabled=false;$('rag-upload-progress').textContent=''}
 }
 async function buildRagIndex(){
  const pid=state.projectSelected;if(!pid)return;
@@ -292,13 +303,18 @@ async function refreshEvidence(){
  const [a,h]=await Promise.all([api(`/api/projects/${pid}/artifacts`),api(`/api/projects/${pid}/handoffs`)]);
  if(state.projectSelected!==pid)return;
  if(!a.artifacts.length)filesRoot.textContent='No documents uploaded yet.';
- for(const file of a.artifacts){const el=mk('div',{class:'evidence-item'});el.append(mk('b',{},file.name),mk('small',{},`${file.size} bytes · SHA-256 ${file.sha256}`));filesRoot.append(el)}
+ for(const file of a.artifacts){const el=mk('div',{class:'evidence-item'});el.append(mk('b',{},file.name),mk('small',{},`${file.size} bytes · SHA-256 ${file.sha256}`));
+  const preview=mk('button',{type:'button',class:'secondary'},'Read actual text');
+  preview.addEventListener('click',async()=>{try{const data=await api(`/api/projects/${pid}/artifacts/${file.id}/text`);
+    let pre=el.querySelector('pre');if(!pre){pre=mk('pre',{class:'artifact-excerpt'});el.append(pre)}
+    pre.textContent=`${data.filename} · ${data.page?'page '+data.page:'offset 0'}\n${data.text||'[No readable text on this page]'}`;
+  }catch(err){alertMessage(err.message)}});el.append(preview);filesRoot.append(el)}
  if(!h.handoffs.length)handoffRoot.textContent='No agent handoffs yet.';
  for(const item of h.handoffs){const el=mk('div',{class:'evidence-item'});el.append(mk('b',{},`${nice(item.sender)} → ${nice(item.recipient)}`),mk('small',{},`${item.status} · integrity ${item.integrity} · tests ${item.manifest.test_status}`));handoffRoot.append(el)}
 }
 function renderRooms(){const root=$('rooms');root.replaceChildren();$('metric-meetings').textContent=state.meetings.length;if(!state.meetings.length){root.append(mk('p',{class:'muted'},'No meetings yet.'));return;}for(const m of state.meetings){const b=mk('button',{class:'room-item'+(state.selected===m.id?' selected':'')});b.append(mk('div',{class:'room-title'},m.topic),mk('div',{class:'room-info'},m.status.toUpperCase()+' · '+m.participants.length+' agents · '+time(m.starts_at)));b.addEventListener('click',async()=>{state.selected=m.id;state.renderedIds='';try{await refreshRoom()}catch(e){alertMessage(e.message)}});root.append(b);}}
 async function refreshMeetings(){state.meetings=(await api('/api/meetings')).meetings;if(!state.selected&&state.meetings.length)state.selected=state.meetings[0].id;renderRooms();}
-function renderRoom(){const room=state.room;const live=room?.status==='live';const human=live&&room.floor==='human';$('take-floor').disabled=!live||human;$('yield-floor').disabled=!human;$('dictate').disabled=!live||human;$('end-room').disabled=!live&&room?.status!=='scheduled';$('cancel-room').disabled=!room||['ended','cancelled'].includes(room.status);$('send-question').disabled=!live;
+function renderRoom(){const room=state.room;const live=room?.status==='live';const human=live&&room.floor==='human';$('take-floor').disabled=!live||human;$('yield-floor').disabled=!human;$('dictate').disabled=!live||human;$('end-room').disabled=!live&&room?.status!=='scheduled';$('cancel-room').disabled=!room||['ended','cancelled'].includes(room.status);$('send-question').disabled=!live;$('meeting-upload').disabled=!room||['ended','cancelled'].includes(room.status);
  $('room-title').textContent=room?.topic||'Select a meeting';$('room-subtitle').textContent=room?`Chaired by Product Manager · ${room.participants.length} AI participants · ID ${room.id}`:'Create a room or select an existing one to begin.';
  const badge=$('room-badge');badge.textContent=!room?'Not connected':human?'Human speaking':room.status==='live'?'Live':room.status==='scheduled'?'Scheduled':room.status==='cancelled'?'Cancelled':'Ended';badge.className='status status-'+(!room?'idle':human?'human':room.status);
  const banner=$('floor-banner');banner.className='floor-banner'+(human?' human':'');banner.textContent=!room?'Start a meeting to open the live conversation.':room.status==='scheduled'?'Scheduled for '+new Date(room.starts_at*1000).toLocaleString():room.status==='ended'?'Meeting closed. Transcript saved.':room.status==='cancelled'?'Meeting cancelled. Pending agent turns were stopped and preserved in the transcript.':human?'✋ You have the floor. Agent messages are paused, including answers already in progress.':'● Agents have the floor. A directed question receives priority over the general agenda.';
@@ -310,15 +326,55 @@ function renderRoom(){const room=state.room;const live=room?.status==='live';con
  for(const m of messages){const type=m.actor==='human'?'human':m.actor==='system'?'system':'agent';const item=mk('article',{class:'message '+type});item.append(mk('div',{class:'message-avatar'},m.actor==='human'?'YOU':m.actor==='system'?'i':m.actor==='product-manager'?'PM':m.actor.slice(0,2).toUpperCase()));const bubble=mk('div',{class:'bubble'});const by=mk('div',{class:'byline'});by.append(mk('strong',{},m.actor==='human'?'You':nice(m.actor)),mk('span',{},time(m.created_at)));if(m.target!=='all')by.append(mk('em',{},'→ '+nice(m.target)));if(m.kind==='question')by.append(mk('em',{},'Question'));bubble.append(by,mk('p',{},m.body));item.append(bubble);transcript.append(item);}
  if(bottom)transcript.scrollTop=transcript.scrollHeight;else transcript.scrollTop+=Math.max(0,transcript.scrollHeight-previousHeight);
 }
-async function refreshRoom(){if(!state.selected)return;state.room=await api('/api/meetings/'+state.selected);renderRoom();renderRooms();}
+async function refreshRoom(){if(!state.selected)return;state.room=await api('/api/meetings/'+state.selected);renderRoom();renderRooms();await refreshMeetingFiles();}
+async function refreshMeetingFiles(){
+ const mid=state.selected,root=$('meeting-file-list');root.replaceChildren();
+ if(!mid){root.textContent='Select a meeting to share documents.';return;}
+ const data=await api(`/api/meetings/${mid}/artifacts`);
+ if(mid!==state.selected)return;
+ if(!data.artifacts.length){root.textContent='No meeting-specific attachments yet. Project meetings also have access to project files.';return;}
+ for(const file of data.artifacts){
+  const item=mk('div',{class:'meeting-file-item'});
+  item.append(mk('span',{},`${file.name} · ${(file.size/(1024*1024)).toFixed(2)} MiB`));
+  const view=mk('button',{class:'secondary',type:'button'},'Read text');
+  view.addEventListener('click',async()=>{
+   try{const result=await api(`/api/meetings/${mid}/artifacts/${file.id}/text`);
+     const pre=$('meeting-file-preview');pre.hidden=false;pre.textContent=result.text||'[No readable text on this page]';}
+   catch(err){alertMessage(err.message)}
+  });item.append(view);root.append(item);
+ }
+}
+async function uploadMeetingDocuments(){
+ const mid=state.selected,files=[...$('meeting-files').files];
+ if(!mid||!files.length){alertMessage('Select a meeting and at least one file.');return;}
+ $('meeting-upload').disabled=true;
+ try{for(const file of files){await uploadFile(`/api/meetings/${mid}/artifacts/upload`,file,
+          t=>$('meeting-upload-progress').textContent=t)}
+   $('meeting-files').value='';await refreshMeetingFiles();
+   alertMessage('Meeting files uploaded and made available to authorized agents.');
+ }catch(err){alertMessage(err.message)}finally{
+   $('meeting-upload-progress').textContent='';$('meeting-upload').disabled=!state.room||['ended','cancelled'].includes(state.room.status);
+ }
+}
 async function performRoom(action,body={}){if(!state.selected)return;try{state.room=await post(`/api/meetings/${state.selected}/${action}`,body);renderRoom();await refreshMeetings();}catch(e){alertMessage(e.message);}}
 function openModal(){const roles=$('role-checks');roles.replaceChildren();for(const id of Object.keys(state.roles)){const label=mk('label',{class:'role-check'});const input=mk('input',{type:'checkbox',value:id});if(['rag-engineer','agentic-ai-engineer'].includes(id))input.checked=true;input.addEventListener('change',countChecked);label.append(input,mk('span',{},nice(id)));roles.append(label);}countChecked();$('modal').hidden=false;$('meeting-topic').focus();}
 function countChecked(){$('checked-count').textContent=document.querySelectorAll('#role-checks input:checked').length+' selected';}
 function closeModal(){$('modal').hidden=true;}
-function fileToBase64(file){return new Promise((resolve,reject)=>{
- const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',',2)[1]);
- reader.onerror=()=>reject(Error('Could not read '+file.name));reader.readAsDataURL(file);
-})}
+const MAX_FILE_SIZE=1024*1024*1024;
+function uploadFile(url,file,progress){
+ if(file.size<1||file.size>MAX_FILE_SIZE)return Promise.reject(Error('Each file must be 1 byte to 1 GiB.'));
+ return new Promise((resolve,reject)=>{
+  const xhr=new XMLHttpRequest();xhr.open('PUT',`${url}?name=${encodeURIComponent(file.name)}`);
+  xhr.setRequestHeader('Content-Type','application/octet-stream');
+  xhr.upload.onprogress=e=>{if(e.lengthComputable&&progress)progress(`${file.name}: ${Math.round(100*e.loaded/e.total)}%`)};
+  xhr.onerror=()=>reject(Error('Upload failed. Check the server and retry this file.'));
+  xhr.onabort=()=>reject(Error('Upload cancelled.'));
+  xhr.onload=()=>{let result;try{result=JSON.parse(xhr.responseText)}catch{reject(Error('Upload returned an unreadable response.'));return}
+    if(xhr.status>=200&&xhr.status<300)resolve(result);
+    else reject(Error(result.error||`Upload HTTP ${xhr.status}`));};
+  xhr.send(file);
+ });
+}
 let pendingCancellation=null;
 let cancelFocus=null;
 function openCancelDialog(kind,options){
@@ -402,19 +458,20 @@ function bind(){
  updateEstimate();
  $('project-form').addEventListener('submit',async e=>{e.preventDefault();const kickoff=$('project-kickoff').checked;const intake=intakePayload();if(kickoff&&!state.demo&&!intake.provider_consent){alertMessage('Check the provider consent box before sending a brief to GPT.');return;}try{
   const docs=[...$('project-files').files];
-  if(docs.some(f=>f.size<1||f.size>8*1024*1024))throw Error('Every project file must be between 1 byte and 8 MiB.');
+  if(docs.some(f=>f.size<1||f.size>MAX_FILE_SIZE))throw Error('Every project file must be between 1 byte and 1 GiB.');
   // Create first, upload references, then kickoff so the project starts with attached documents.
   const project=await post('/api/projects',{name:$('project-name').value,brief:$('project-brief').value,intake,kickoff:false});
   state.projectSelected=project.id;state.selectedTask=null;state.selectedTaskIds.clear();
   try{
-   for(const file of docs){const b64=await fileToBase64(file);await post(`/api/projects/${project.id}/artifacts`,{name:file.name,base64:b64})}
+   for(const file of docs){await uploadFile(`/api/projects/${project.id}/artifacts/upload`,file,t=>$('project-upload-progress').textContent=t)}
   }catch(uploadError){throw Error(`Project ${project.name} was created, but document upload failed: ${uploadError.message}. Please review the artifact ledger before starting.`)}
   if(kickoff)await post(`/api/projects/${project.id}/kickoff`,{});
-  $('project-form').reset();$('pending-docs').textContent='Up to 8 MiB each. Files are stored in the project artifact ledger.';
+  $('project-form').reset();$('pending-docs').textContent='Up to 1 GiB each. Authorized agents can read text excerpts.';$('project-upload-progress').textContent='';
   updateEstimate();await refreshProjects();await refreshActivity();
-  alertMessage('Project created'+(kickoff?' and Product Manager queued.':'.')+' Track work below.');
+  alertMessage('Project created'+(kickoff?' with two Business Analysts and Product Manager queued.':'.')+' Track work below.');
  }catch(err){alertMessage(err.message)}});
  $('ask-worker').addEventListener('click',()=>{const task=state.activity?.messages?.find(x=>x.id===state.selectedTask);if(!task)return;openModal();$('meeting-topic').value=`Review ${state.activity.project.name} with ${nice(task.recipient)}`;$('meeting-project').value=state.projectSelected;for(const el of document.querySelectorAll('#role-checks input'))el.checked=el.value===task.recipient;countChecked();});
+ $('meeting-upload').addEventListener('click',uploadMeetingDocuments);
  $('meeting-form').addEventListener('submit',async e=>{e.preventDefault();const participants=[...document.querySelectorAll('#role-checks input:checked')].map(x=>x.value);const topic=$('meeting-topic').value;const starts=$('meeting-time').value;const starts_at=starts?Math.floor(new Date(starts).getTime()/1000):null;try{const room=await post('/api/meetings',{topic,participants,project_id:$('meeting-project').value||null,starts_at});state.selected=room.id;state.renderedIds='';closeModal();$('meeting-form').reset();switchView('meetings');await refreshMeetings();await refreshRoom();}catch(err){alertMessage(err.message)}});
  $('take-floor').addEventListener('click',()=>performRoom('interrupt'));
  $('yield-floor').addEventListener('click',()=>performRoom('yield'));

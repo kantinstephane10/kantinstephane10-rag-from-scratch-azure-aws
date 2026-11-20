@@ -163,12 +163,12 @@ class Store:
                  'Required initial business analysis: assess the problem, stakeholders, end users, user stories, '
                  'success metrics, scope, acceptance criteria, data ownership and explicit approval needs. '
                  'Report confirmed facts versus assumptions; do not invent authorization or tests. '
-                 'Project brief: '+project['brief'], 'mandatory_business_analysis'),
+                 'Read the FULL stored project brief from your task context.', 'mandatory_business_analysis'),
                 ('business-analyst-2',
                  'Required independent business analysis: challenge assumptions, identify exceptions, '
                  'operational workflows, compliance and data-access constraints, cost/benefit and failure cases. '
                  'Define measurable acceptance criteria and open questions. '
-                 'Project brief: '+project['brief'], 'mandatory_business_analysis'),
+                 'Read the FULL stored project brief from your task context.', 'mandatory_business_analysis'),
                 ('product-manager', manager_prompt, 'pm_kickoff'),
             ]
             tasks=[]
@@ -252,6 +252,7 @@ class Store:
                 raise StoreError('Deletion state changed unexpectedly.')
             mids=[r[0] for r in db.execute('SELECT id FROM meetings WHERE project_id=?',(pid,))]
             for mid in mids:
+                db.execute('DELETE FROM meeting_attachments WHERE meeting_id=?',(mid,))
                 db.execute('DELETE FROM meeting_messages WHERE meeting_id=?',(mid,))
                 db.execute('DELETE FROM meeting_turns WHERE meeting_id=?',(mid,))
             db.execute('DELETE FROM meetings WHERE project_id=?',(pid,))

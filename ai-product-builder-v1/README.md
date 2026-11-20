@@ -109,3 +109,7 @@ This package does **not** promise autonomous production code generation, CI/CD, 
 ## Mandatory Business Analyst participation (V1.3.2)
 
 Every **newly kicked-off project** schedules Business Analyst 1 and Business Analyst 2 before the Product Manager's kickoff. The Product Manager cannot begin until both initial reviews finish or terminate; the PM receives both recorded assessments and must flag any failed review. These three assignments are inserted atomically and persist across restart. No extra agent relay-depth or token caps are imposed. Existing project histories are not rewritten automatically.
+
+## V1.3.3 update — large files and per-agent file reading
+
+See [RELEASE_NOTES_V1.3.3.md](RELEASE_NOTES_V1.3.3.md). Highlights: 1 GiB streamed uploads, project/meeting file attachments, real PDF/TXT source access for all 49 registered agents, short kickoff assignments for long project briefs, and **Start agents** for an existing draft. All files remain project/meeting-scoped. A 1 GiB upload does not imply full 1 GiB semantic indexing; the existing index limits still apply.
