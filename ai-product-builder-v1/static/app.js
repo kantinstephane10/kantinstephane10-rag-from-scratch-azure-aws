@@ -111,7 +111,9 @@ function renderArchitecture(){
  badge.className='workflow-badge';
  if(!data){badge.textContent='READY';$('workflow-subtitle').textContent='Create a project to start the agent workflow';}
  else if(status==='approved'){badge.textContent='APPROVED';$('workflow-subtitle').textContent=data.project.name+' · Human-approved project';badge.classList.add('success');}
- else if(status==='awaiting_human'){badge.textContent='PAUSED';$('workflow-subtitle').textContent=data.project.name+' · Awaiting human decision';badge.classList.add('paused');}
+ else if(status==='awaiting_human'&&count.processing>0){badge.textContent='WORKING';$('workflow-subtitle').textContent=data.project.name+' · Advisory agents working; human review pending';badge.classList.add('working');}
+ else if(status==='awaiting_human'&&count.queued>0){badge.textContent='QUEUED';$('workflow-subtitle').textContent=data.project.name+' · Specialists scheduled automatically; human review pending';badge.classList.add('queued');}
+ else if(status==='awaiting_human'){badge.textContent='REVIEW';$('workflow-subtitle').textContent=data.project.name+' · Advisory work complete; awaiting human decision';badge.classList.add('paused');}
  else if(count.processing>0){badge.textContent='WORKING';$('workflow-subtitle').textContent=data.project.name+' · Agents processing tasks';badge.classList.add('working');}
  else if(count.total>0&&count.queued===0){badge.textContent='PAUSED';$('workflow-subtitle').textContent=data.project.name+' · Between agent turns';badge.classList.add('paused');}
  else if(count.total>0){badge.textContent='QUEUED';$('workflow-subtitle').textContent=data.project.name+' · Agent tasks queued';badge.classList.add('queued');}
@@ -128,8 +130,29 @@ function refreshProjectPicker(){
  for(const item of state.projects)p.append(mk('option',{value:item.id},item.name));
  p.value=selected;
 }
-function renderProjects(){const root=$('project-list');root.replaceChildren();if(!state.projects.length){root.append(mk('p',{class:'muted'},'No projects yet.'));return;}for(const p of state.projects){const item=mk('button',{class:'project-item'+(state.projectSelected===p.id?' selected':''),type:'button'});item.append(mk('b',{},p.name),mk('small',{},p.status+' · '+p.id));item.addEventListener('click',()=>{state.projectSelected=p.id;state.selectedTask=null;state.selectedTaskIds.clear();renderProjects();refreshActivity().catch(e=>alertMessage(e.message));});root.append(item);}fillSelect($('meeting-project'),state.projects.map(p=>[p.id,p.name]),['','Standalone meeting']);}
-async function refreshProjects(){state.projects=(await api('/api/projects')).projects;if(!state.projectSelected&&state.projects.length)state.projectSelected=state.projects[0].id;renderProjects();refreshProjectPicker();if(state.projectSelected)await refreshActivity();else renderArchitecture();}
+function renderProjects(){
+ const root=$('project-list');root.replaceChildren();
+ if(!state.projects.length)root.append(mk('p',{class:'muted'},'No projects yet.'));
+ for(const project of state.projects){
+  const entry=mk('div',{class:'project-ledger-entry'});
+  const item=mk('button',{class:'project-item'+(state.projectSelected===project.id?' selected':''),type:'button'});
+  item.append(mk('b',{},project.name),mk('small',{},project.status+' · '+project.id));
+  item.addEventListener('click',async()=>{state.projectSelected=project.id;state.selectedTask=null;state.selectedTaskIds.clear();renderProjects();await refreshActivity();await refreshRagStatus();});
+  const del=mk('button',{class:'danger project-delete-button',type:'button','aria-label':'Delete project '+project.name},'Delete');
+  del.addEventListener('click',()=>openDeleteDialog(project));
+  entry.append(item,del);root.append(entry);
+ }
+ fillSelect($('meeting-project'),state.projects.map(p=>[p.id,p.name]),['','Standalone meeting']);
+}
+
+async function refreshProjects(){
+ state.projects=(await api('/api/projects')).projects;
+ if(!state.projects.some(p=>p.id===state.projectSelected))state.projectSelected=state.projects[0]?.id||null;
+ renderProjects();refreshProjectPicker();
+ if(state.projectSelected)await refreshActivity();else {state.activity=null;$('project-live').hidden=true;renderArchitecture();}
+ await refreshRagStatus();
+}
+
 function intakePayload(){const num=id=>Number($(id).value||'0');return {product_type:$('project-type').value,model_profile:$('model-profile').value,provider_consent:$('provider-consent').checked,estimated_hours:num('estimated-hours'),hourly_rate:num('hourly-rate'),one_time_expenses:num('one-time'),monthly_cost:num('monthly-cost'),contingency_pct:num('contingency')};}
 function updateEstimate(){const c=intakePayload();const total=(c.estimated_hours*c.hourly_rate+c.one_time_expenses)*(1+c.contingency_pct/100);const money=n=>Number.isFinite(n)?n.toLocaleString(undefined,{style:'currency',currency:'USD'}):'Invalid';$('estimate-preview').textContent=`Estimated one-time budget: ${money(total)} · Monthly: ${money(c.monthly_cost)} (separate)`;}
 const ACTIVE_TASK_STATES = new Set(['queued','processing','failed','blocked']);
@@ -189,6 +212,76 @@ ${task.reply||'Not yet available'}${errorDetails}${cancelDetails}`;
  $('ask-worker').disabled=false;
  $('cancel-task').disabled=!ACTIVE_TASK_STATES.has(task.status);
  updateBulkSelectionUI();
+}
+async function refreshRagStatus(){
+ const project=state.projects.find(p=>p.id===state.projectSelected);
+ const panel=$('rag-panel');panel.hidden=!project||!state.activity||state.activity.project?.intake?.product_type!=='rag';
+ if(panel.hidden)return;
+ const pid=project.id;
+ const data=await api(`/api/projects/${pid}/rag/status`);
+ if(state.projectSelected!==pid)return;
+ const job=data.job;
+ const busy=['queued','running'].includes(job?.status);
+ const indexText=data.indexed?`Indexed ${data.chunk_count} passages from ${data.receipt?.documents?.length||0} documents.`:'No index has been built.';
+ const jobText=job?`Last index job: ${job.status}${job.error?' — '+job.error:''}.`:'';
+ $('rag-state').textContent=indexText+(data.stale?' Index is stale—rebuild before asking.':'')+' '+jobText;
+ const verified=(data.receipt?.ingestion_checks?.document_checksums==='verified');
+ $('rag-details').textContent=verified?'Ingestion integrity verified. Answer accuracy, user access control, and release approval remain untested.':'Readable PDF/TXT/MD/CSV content and OpenAI embeddings are required. Scanned PDFs need OCR (not available).';
+ $('rag-build').disabled=busy||state.demo;
+ $('rag-ask').disabled=!data.indexed||data.stale||busy||state.demo;
+ $('rag-upload').disabled=busy;
+}
+let projectToDelete=null;
+function openDeleteDialog(project){
+ projectToDelete={id:project.id,name:project.name};
+ $('delete-description').textContent=`Delete ${project.name}? This permanently removes only this project's files, messages, RAG index and meetings.`;
+ $('delete-confirm-name').value='';$('delete-project-confirm').disabled=true;
+ $('delete-dialog').hidden=false;$('delete-confirm-name').focus();
+}
+function closeDeleteDialog(){$('delete-dialog').hidden=true;projectToDelete=null;}
+async function submitDeleteProject(e){
+ e.preventDefault();const project=projectToDelete;
+ if(!project||$('delete-confirm-name').value!==project.name)return;
+ $('delete-project-confirm').disabled=true;
+ try{
+  await post(`/api/projects/${project.id}/delete`,{confirmation:project.name});
+  if(state.projectSelected===project.id){state.projectSelected=null;state.selectedTask=null;state.activity=null;state.selectedTaskIds.clear();}
+  if(state.room?.project_id===project.id){state.room=null;state.selected=null;state.renderedIds='';}
+  closeDeleteDialog();await refreshProjects();await refreshMeetings();
+  if(state.selected)await refreshRoom();else renderRoom();
+  $('rag-answer').textContent='Project deleted. No indexed documents are selected.';
+  alertMessage(`Project '${project.name}' permanently deleted.`);
+ }catch(err){alertMessage(err.message);$('delete-project-confirm').disabled=false;}
+}
+async function uploadRagDocuments(){
+ const pid=state.projectSelected;const files=[...$('rag-files').files];
+ if(!pid||!files.length){alertMessage('Choose a project and documents first.');return;}
+ if(files.some(f=>f.size<1||f.size>8*1024*1024)){alertMessage('Each file must be between 1 byte and 8 MiB.');return;}
+ $('rag-upload').disabled=true;
+ try{
+  for(const file of files){await post(`/api/projects/${pid}/artifacts`,{name:file.name,base64:await fileToBase64(file)})}
+  $('rag-files').value='';await refreshRagStatus();
+  alertMessage(`${files.length} documents uploaded. Rebuild the index to include them.`);
+ }catch(err){alertMessage(err.message)}finally{$('rag-upload').disabled=false}
+}
+async function buildRagIndex(){
+ const pid=state.projectSelected;if(!pid)return;
+ $('rag-build').disabled=true;
+ try{const result=await post(`/api/projects/${pid}/rag/index`,{});
+  $('rag-state').textContent=`Indexing requested (${result.job_id}). Document extraction and embeddings are running.`;
+  await refreshRagStatus();
+ }catch(err){alertMessage(err.message);await refreshRagStatus()}
+}
+async function askRag(e){
+ e.preventDefault();const pid=state.projectSelected;const question=$('rag-question').value.trim();if(!pid||!question)return;
+ $('rag-ask').disabled=true;$('rag-answer').textContent='Retrieving passages and requesting an OpenAI answer…';
+ try{
+  const result=await post(`/api/projects/${pid}/rag/ask`,{question});
+  const root=$('rag-answer');root.replaceChildren();root.append(mk('h3',{},'Grounded answer'),mk('p',{class:'rag-generated-answer'},result.answer),mk('h3',{},'Retrieved source references'));
+  for(const source of result.sources){const el=mk('div',{class:'rag-source'});
+   el.append(mk('b',{},`${source.ref} · ${source.file}${source.page?' · page '+source.page:''}`),mk('p',{},source.preview));root.append(el)}
+  root.append(mk('p',{class:'muted'},result.note));
+ }catch(err){$('rag-answer').textContent='RAG request failed: '+err.message;alertMessage(err.message)}finally{await refreshRagStatus()}
 }
 async function refreshEvidence(){
  const pid=state.projectSelected;
@@ -290,6 +383,14 @@ function bind(){
  $('new-meeting').addEventListener('click',openModal);for(const id of ['close-modal','cancel-modal','close-backdrop'])$(id).addEventListener('click',closeModal);
  $('refresh-rooms').addEventListener('click',async()=>{try{await refreshMeetings();await refreshRoom()}catch(e){alertMessage(e.message)}});
  $('refresh-projects').addEventListener('click',()=>refreshProjects().catch(e=>alertMessage(e.message)));
+ $('rag-refresh').addEventListener('click',()=>refreshRagStatus().catch(e=>alertMessage(e.message)));
+ $('rag-build').addEventListener('click',buildRagIndex);
+ $('rag-upload').addEventListener('click',uploadRagDocuments);
+ $('rag-question-form').addEventListener('submit',askRag);
+ $('delete-confirm-name').addEventListener('input',()=>{$('delete-project-confirm').disabled=!projectToDelete||$('delete-confirm-name').value!==projectToDelete.name});
+ $('delete-project-form').addEventListener('submit',submitDeleteProject);
+ for(const id of ['delete-dialog-x','delete-dismiss','delete-backdrop'])$(id).addEventListener('click',closeDeleteDialog);
+
  $('project-files').addEventListener('change',()=>{$('pending-docs').textContent=[...$('project-files').files].map(f=>`${f.name} (${f.size} bytes)`).join(' · ')||'No files selected.'});
  $('refresh-activity').addEventListener('click',()=>refreshActivity().catch(e=>alertMessage(e.message)));
  $('refresh-handoffs').addEventListener('click',()=>refreshEvidence().catch(e=>alertMessage(e.message)));
@@ -300,7 +401,7 @@ function bind(){
  updateEstimate();
  $('project-form').addEventListener('submit',async e=>{e.preventDefault();const kickoff=$('project-kickoff').checked;const intake=intakePayload();if(kickoff&&!state.demo&&!intake.provider_consent){alertMessage('Check the provider consent box before sending a brief to GPT.');return;}try{
   const docs=[...$('project-files').files];
-  if(docs.some(f=>f.size<1||f.size>1_000_000))throw Error('Every project file must be between 1 byte and 1 MB.');
+  if(docs.some(f=>f.size<1||f.size>8*1024*1024))throw Error('Every project file must be between 1 byte and 8 MiB.');
   // Create first, upload references, then kickoff so the project starts with attached documents.
   const project=await post('/api/projects',{name:$('project-name').value,brief:$('project-brief').value,intake,kickoff:false});
   state.projectSelected=project.id;state.selectedTask=null;state.selectedTaskIds.clear();
@@ -308,7 +409,7 @@ function bind(){
    for(const file of docs){const b64=await fileToBase64(file);await post(`/api/projects/${project.id}/artifacts`,{name:file.name,base64:b64})}
   }catch(uploadError){throw Error(`Project ${project.name} was created, but document upload failed: ${uploadError.message}. Please review the artifact ledger before starting.`)}
   if(kickoff)await post(`/api/projects/${project.id}/kickoff`,{});
-  $('project-form').reset();$('pending-docs').textContent='Up to 1 MB each. Files are stored in the project artifact ledger.';
+  $('project-form').reset();$('pending-docs').textContent='Up to 8 MiB each. Files are stored in the project artifact ledger.';
   updateEstimate();await refreshProjects();await refreshActivity();
   alertMessage('Project created'+(kickoff?' and Product Manager queued.':'.')+' Track work below.');
  }catch(err){alertMessage(err.message)}});
@@ -398,4 +499,4 @@ function bindSettings(){
 }
 
 bindSettings();
-bind();init();setInterval(async()=>{try{await refreshMeetings();await refreshRoom();if(['projects','architecture'].includes(state.view)&&state.projectSelected)await refreshActivity();}catch(e){/* transient connection errors handled on user actions */}},1500);
+bind();init();setInterval(async()=>{try{await refreshMeetings();await refreshRoom();if(['projects','architecture'].includes(state.view)&&state.projectSelected){await refreshActivity();if(state.view==='projects')await refreshRagStatus();}}catch(e){/* transient connection errors handled on user actions */}},1500);

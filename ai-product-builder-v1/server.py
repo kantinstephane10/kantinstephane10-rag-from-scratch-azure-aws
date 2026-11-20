@@ -25,16 +25,39 @@ from meetings import (create_meeting, meeting, list_meetings, start_meeting,
 from roles import ROLES
 from store import Store, StoreError
 from handoffs import save_artifact, artifacts, list_handoffs, read_artifact
+from rag_pipeline import init_rag,rag_status,start_index_job,answer_question
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger(__name__)
-MAX_POST = 1_400_000  # 1 MB artifact after base64 transport
+MAX_POST = 11_500_000  # 8 MiB attachment after base64 JSON encoding
 
 
 def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtime=None):
     is_loopback = host in ('127.0.0.1','localhost','::1')
     if not is_loopback and not access_token:
         raise ValueError('Non-loopback binding requires BUILDER_ACCESS_TOKEN and TLS reverse proxy.')
+    init_rag(store)
+
+    def rag_access(pid):
+        project=store.project(pid)
+        if not is_loopback:
+            raise StoreError('RAG execution is restricted to the localhost dashboard.')
+        if engine.demo or runtime is None or runtime.data['mode']!='openai':
+            raise StoreError('Select Live OpenAI mode under Settings to run document indexing and RAG questions.')
+        if not runtime.key:raise StoreError('Save an OpenAI API key in Settings first.')
+        if not project['intake']['provider_consent']:
+            raise StoreError('Confirm OpenAI document processing consent for this project.')
+        return project
+
+    def auto_index(pid):
+        # The project UI uploads files before requesting kickoff. Index is a real
+        # background job and never runs in synthetic/offline demo mode.
+        project=store.project(pid)
+        if project['intake']['product_type']!='rag' or engine.demo or runtime is None or not runtime.key:return
+        if not project['intake']['provider_consent']:return
+        if not any(Path(a['name']).suffix.lower() in {'.pdf','.md','.txt','.csv'} for a in artifacts(store,pid)):return
+        try:start_index_job(store,pid,runtime.key)
+        except StoreError:LOG.exception('Automatic RAG index scheduling failed for %s',pid)
 
     class Handler(BaseHTTPRequestHandler):
         server_version='AIProductBuilder/0.4'
@@ -115,6 +138,8 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                     if runtime is None: raise StoreError('Runtime settings not configured.')
                     self._json(200,{'models':runtime.available_models()})
                 elif path=='/api/projects': self._json(200,{'projects':store.projects()})
+                elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/rag/status',path):
+                    self._json(200,rag_status(store,path.split('/')[3]))
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/artifacts',path):
                     pid=path.split('/')[3]
                     self._json(200,{'artifacts':artifacts(store,pid)})
@@ -165,8 +190,22 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                     if data.get('kickoff',False) and not engine.demo and data.get('intake',{}).get('provider_consent') is not True:
                         raise StoreError('Confirm provider consent before starting GPT workers.')
                     project=store.create_project(data.get('name',''),data.get('brief',''),intake=data.get('intake'))
-                    if data.get('kickoff',False): engine.kickoff(project['id'])
+                    if data.get('kickoff',False):
+                        engine.kickoff(project['id'])
+                        auto_index(project['id'])
                     self._json(201,project)
+                elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/rag/index',path):
+                    pid=path.split('/')[3]
+                    rag_access(pid)
+                    self._json(202,start_index_job(store,pid,runtime.key))
+                elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/rag/ask',path):
+                    pid=path.split('/')[3]
+                    rag_access(pid)
+                    self._json(200,answer_question(store,pid,data.get('question'),runtime.key,
+                                      runtime.model_for('rag-engineer')))
+                elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/delete',path):
+                    pid=path.split('/')[3]
+                    self._json(200,store.delete_project(pid,data.get('confirmation')))
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/artifacts',path):
                     pid=path.split('/')[3]
                     try: raw=base64.b64decode(data.get('base64',''),validate=True)
@@ -191,7 +230,9 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                     parts=path.split('/'); pid=parts[3]; action=parts[4]
                     if action=='message':
                         result=store.send(pid,'human',data.get('recipient',''),data.get('message',''))
-                    elif action=='kickoff': result=engine.kickoff(pid)
+                    elif action=='kickoff':
+                        result=engine.kickoff(pid)
+                        auto_index(pid)
                     elif action=='approve':
                         store.approve(pid,data.get('confirmation'),data.get('operator',''));result=store.project(pid)
                     elif action=='resume': store.resume(pid);result=store.project(pid)

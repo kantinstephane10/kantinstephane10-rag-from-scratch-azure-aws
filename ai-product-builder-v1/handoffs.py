@@ -13,7 +13,7 @@ from uuid import uuid4
 from store import StoreError
 from roles import ROLES
 
-MAX_ARTIFACT_BYTES = 1_000_000
+MAX_ARTIFACT_BYTES = 8 * 1024 * 1024
 ALLOWED_SUFFIXES = {'.txt', '.md', '.py', '.json', '.csv', '.pdf', '.ipynb', '.yaml', '.yml', '.toml', '.html', '.js', '.css'}
 
 
@@ -59,18 +59,24 @@ def save_artifact(store, pid, name, raw, creator='human'):
     if creator != 'human' and creator not in ROLES:
         raise StoreError('Unknown artifact author.')
     if not isinstance(raw, bytes) or not 0 < len(raw) <= MAX_ARTIFACT_BYTES:
-        raise StoreError('Artifact must be between 1 byte and 1 MB.')
+        raise StoreError('Artifact must be between 1 byte and 8 MiB.')
     aid=uuid4().hex; path=_artifact_path(store,pid,aid,name)
     path.parent.mkdir(parents=True,exist_ok=False)
     try:
         with open(path,'xb') as f:
             f.write(raw)
         with store.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            state=db.execute('SELECT status FROM projects WHERE id=?',(pid,)).fetchone()
+            if not state or state['status'] in ('approved','deleting'):
+                raise StoreError('Project is no longer accepting uploaded documents.')
             db.execute('INSERT INTO artifacts VALUES(?,?,?,?,?,?,?)',
                        (aid,pid,name,_digest(raw),len(raw),creator,int(time.time())))
             store._event(db,pid,'artifact_uploaded',creator,{'id':aid,'name':name,'sha256':_digest(raw)})
     except Exception:
         path.unlink(missing_ok=True)
+        try: path.parent.rmdir()
+        except OSError: pass
         raise
     return {'id':aid,'name':name,'sha256':_digest(raw),'size':len(raw),'creator':creator}
 

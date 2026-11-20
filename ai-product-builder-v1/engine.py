@@ -208,8 +208,23 @@ class Engine:
             self._reserve(usage_key)
             outcome=self.client.generate(role,model,instructions,context)
             self._record(usage_key,outcome)
-            meetings.finish_turn(self.store,turn["id"],outcome["reply"],model,
-                                 questions=outcome.get("outgoing",[]))
+            reply=outcome.get('reply')
+            if not isinstance(reply,str) or not reply.strip():
+                raise StoreError('Meeting agent returned no usable reply.')
+            if len(reply)>8000:
+                reply=reply[:7940].rstrip()+'\n[Long response truncated for the transcript]'
+            questions=outcome.get('outgoing') or []
+            try:
+                meetings.finish_turn(self.store,turn['id'],reply,model,questions=questions)
+            except StoreError as exc:
+                # Invalid directed questions (depth, budget, target, size) must not
+                # discard the main contribution or trigger a second paid API call.
+                # finish_turn is transactional, so retrying without the question
+                # cannot duplicate a partially committed reply.
+                if not questions:
+                    raise
+                LOG.warning('Meeting directed question suppressed for %s: %s',role,exc)
+                meetings.finish_turn(self.store,turn['id'],reply,model,questions=[])
         except ModelError as exc:
             meetings.fail_turn(self.store,turn["id"],exc,retryable=exc.retryable)
         except Exception as exc:

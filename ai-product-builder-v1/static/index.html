@@ -116,7 +116,7 @@
 <label for="project-type">AI product type</label><select id="project-type"><option value="rag">RAG assistant</option><option value="agent">AI agent</option><option value="agentic">Agentic AI system</option></select>
 <label for="project-name">Project name</label><input id="project-name" maxlength="160" required placeholder="e.g. Multicloud RAG assistant">
 <label for="project-brief">Project ideas and requirements</label><textarea id="project-brief" rows="6" maxlength="20000" required placeholder="Describe the problem, users, data sources, and what success looks like…"></textarea>
-<label for="project-files">Project documents and technical references</label><div class="upload-zone"><label class="upload-label" for="project-files">⬆ Choose files or drag them here</label><input id="project-files" type="file" multiple accept=".txt,.md,.py,.json,.csv,.pdf,.ipynb,.yaml,.yml,.toml,.html,.js,.css"><div id="pending-docs" class="muted">Up to 1 MB each. Files are stored in the selected project's artifact ledger.</div></div>
+<label for="project-files">Project documents and technical references</label><div class="upload-zone"><label class="upload-label" for="project-files">⬆ Choose files or drag them here</label><input id="project-files" type="file" multiple accept=".txt,.md,.py,.json,.csv,.pdf,.ipynb,.yaml,.yml,.toml,.html,.js,.css"><div id="pending-docs" class="muted">Up to 8 MiB per file. The document is stored in the project artifact ledger.</div></div>
 <details class="intake-details" open><summary>Project estimate</summary><p class="muted small-muted">Planning calculation only. Enter your own hours and cost assumptions; this is not an AI-generated quote.</p>
 <div class="cost-grid"><label>Estimated engineering hours<input id="estimated-hours" type="number" min="0" max="10000000" value="0" step="0.5"></label><label>Hourly rate (USD)<input id="hourly-rate" type="number" min="0" max="10000000" value="0" step="0.01"></label><label>One-time expenses (USD)<input id="one-time" type="number" min="0" max="10000000" value="0" step="0.01"></label><label>Monthly costs (USD)<input id="monthly-cost" type="number" min="0" max="10000000" value="0" step="0.01"></label><label>Contingency (%)<input id="contingency" type="number" min="0" max="100" value="0" step="0.5"></label></div>
 <div class="estimate-summary" id="estimate-preview">Estimated one-time budget: $0.00 · Monthly: $0.00</div></details>
@@ -127,9 +127,18 @@
 <div class="settings-actions"><button type="button" id="project-save-key" class="secondary">Save API key</button><button type="button" id="project-clear-key" class="secondary">Clear key</button></div>
 <p id="project-key-status" class="muted small-muted">Windows encrypts saved keys for your account and loads them on restart. Keys are never included in project text.</p></details>
 <details class="intake-details"><summary>Project email alerts</summary><p class="muted small-muted">Automatic email delivery is not yet connected. Project status and audit records remain available in the dashboard.</p></details>
-<button type="button" id="project-provider-settings" class="secondary">⚙ Configure all GPT models &amp; token limits</button>
+<button type="button" id="project-provider-settings" class="secondary">⚙ Configure OpenAI &amp; worker models</button>
 <label class="checkline"><input id="project-kickoff" type="checkbox" checked> Start the Product Manager agent upon creation</label>
-<button class="primary" type="submit">Validate &amp; start project</button></form></div><div class="panel"><div class="side-panel-title"><h3>Project ledger</h3><button class="text-btn" id="refresh-projects">Refresh</button></div><div id="project-list" class="project-list"></div></div></div>
+<button class="primary" type="submit">Validate &amp; start project</button></form></div><div class="panel"><div class="side-panel-title"><h3>Project ledger</h3><button class="text-btn" id="refresh-projects">Refresh</button></div><p class="muted project-ledger-hint">Select a project to inspect its work. Delete is permanent and requires its exact name.</p><div id="project-list" class="project-list"></div></div></div>
+<section class="panel rag-panel" id="rag-panel" hidden aria-label="RAG document execution">
+ <div class="side-panel-title"><div><h3>Document RAG execution</h3><p class="muted">Real document extraction, chunking, OpenAI embeddings, retrieval and cited answers.</p></div><button type="button" class="secondary" id="rag-refresh">Refresh status</button></div>
+ <p class="rag-state" id="rag-state">Select a RAG project to see indexing status.</p>
+ <p class="muted small-muted" id="rag-details">Document scope is limited to the selected project. A successful index is not a production security or evaluation approval.</p>
+ <div class="rag-controls"><button class="primary" type="button" id="rag-build">Build / rebuild searchable index</button><label class="secondary rag-upload-label">Add project documents <input type="file" id="rag-files" multiple accept=".pdf,.txt,.md,.csv" /></label><button class="secondary" type="button" id="rag-upload">Upload selected files</button></div>
+ <form id="rag-question-form"><label for="rag-question">Ask your indexed documents</label><textarea id="rag-question" rows="2" maxlength="2000" required placeholder="What do these documents say about ...?"></textarea><button type="submit" id="rag-ask" class="primary">Ask RAG</button></form>
+ <div class="rag-answer" id="rag-answer" aria-live="polite">Answers will appear here with retrieved file and page references.</div>
+ <p class="rag-caution">Access: local operator only. Document-level user ACLs, production authorization, benchmark evaluation, OCR, and deployment are not implemented. Do not treat this as production-ready.</p>
+</section>
 <div class="panel live-work" id="project-live" hidden>
 <div class="side-panel-title"><h3 id="live-title">Agent work sequence</h3><div class="worker-actions"><button id="refresh-activity" class="text-btn" type="button">Refresh live</button><button id="select-all-queued" class="secondary" type="button" disabled>Select all queued</button><button id="clear-task-selection" class="secondary" type="button" disabled>Clear selection</button><button id="cancel-selected-tasks" class="danger" type="button" disabled>Cancel selected (0)</button></div></div>
 <div class="live-progress"><div id="work-progress" class="live-progress-bar"></div></div><div id="work-stats" class="muted small-muted">No work queued.</div><div id="token-usage" class="muted small-muted">No recorded GPT usage yet.</div>
@@ -151,7 +160,7 @@
           <label class="full-label">Meeting model (optional; blank uses each worker's group model)<input id="route-meeting" list="available-models" placeholder="Use agent's assigned model"></label>
           <datalist id="available-models"></datalist>
           <p id="model-lookup-status" class="setting-note">Use “Find available models” to load IDs provided by your OpenAI account.</p>
-          <div class="settings-actions"><button id="save-model-settings" type="button" class="primary">Save routing, budgets &amp; mode</button></div>
+          <div class="settings-actions"><button id="save-model-settings" type="button" class="primary">Save routing &amp; mode</button></div>
         </div>
       </div>
       <div class="panel settings-panel role-settings"><div class="side-panel-title"><h2>Model assignment · all 49 AI workers</h2><span class="small-muted">A blank override uses its role-group model.</span></div><div id="agent-model-grid" class="agent-model-grid"></div><div class="settings-actions"><button id="save-role-settings" class="primary" type="button">Save all 49 worker assignments</button></div></div>
@@ -160,6 +169,16 @@
   </main>
 </div>
 <div id="modal" class="modal" hidden><div class="modal-backdrop" id="close-backdrop"></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="modal-heading"><div class="side-panel-title"><h2 id="modal-heading">Schedule a meeting</h2><button id="close-modal" class="close-btn" aria-label="Close dialog">×</button></div><form id="meeting-form"><label for="meeting-topic">Meeting topic</label><input id="meeting-topic" maxlength="280" placeholder="e.g. RAG retrieval architecture review" required><label for="meeting-project">Project (optional)</label><select id="meeting-project"><option value="">Standalone meeting</option></select><label for="meeting-time">Start time</label><input id="meeting-time" type="datetime-local"><p class="hint">Leave empty to start now. The Product Manager is always chair.</p><div class="side-panel-title"><label>Invite specialist agents</label><span class="small-muted" id="checked-count">0 selected</span></div><div class="role-checks" id="role-checks"></div><div class="dialog-footer"><button type="button" class="secondary" id="cancel-modal">Cancel</button><button type="submit" class="primary">Create meeting</button></div></form></div></div>
+<div id="delete-dialog" class="modal" hidden>
+  <div class="modal-backdrop" id="delete-backdrop"></div>
+  <div class="dialog cancel-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-heading">
+    <div class="side-panel-title"><h2 id="delete-heading">Delete project permanently?</h2><button class="close-btn" type="button" id="delete-dialog-x" aria-label="Close delete dialog">×</button></div>
+    <p class="cancel-description" id="delete-description"></p>
+    <form id="delete-project-form"><label for="delete-confirm-name">Type the exact project name to confirm</label><input id="delete-confirm-name" type="text" autocomplete="off" required /><p class="hint">All this project's saved documents, RAG index, task records, handoffs, and meeting transcripts will be deleted. Other projects are not affected. An already-started OpenAI call may still incur costs.</p>
+      <div class="dialog-footer"><button class="secondary" type="button" id="delete-dismiss">Keep project</button><button class="danger" id="delete-project-confirm" type="submit" disabled>Delete project permanently</button></div>
+    </form>
+  </div>
+</div>
 <div id="cancel-dialog" class="modal" hidden>
   <div class="modal-backdrop" id="cancel-backdrop"></div>
   <div class="dialog cancel-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-heading" aria-describedby="cancel-description">

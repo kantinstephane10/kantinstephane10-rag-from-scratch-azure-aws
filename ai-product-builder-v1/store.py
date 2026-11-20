@@ -1,5 +1,7 @@
 """SQLite-backed project, communication, retry and approval records."""
 import json
+import shutil
+import re
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -142,7 +144,7 @@ class Store:
     def project(self,pid):
         with self.db() as db:
             row=db.execute("SELECT * FROM projects WHERE id=?",(pid,)).fetchone()
-            if row is None:
+            if row is None or row["status"] == "deleting":
                 raise StoreError("Unknown project ID.")
             project = dict(row)
             intake = db.execute("SELECT * FROM project_intake WHERE project_id=?",(pid,)).fetchone()
@@ -153,6 +155,58 @@ class Store:
     def projects(self):
         with self.db() as db:
             return [dict(row) for row in db.execute("SELECT * FROM projects ORDER BY created_at DESC,id DESC LIMIT 100")]
+
+    def delete_project(self, pid, confirmation):
+        """Explicit destructive operator action: stop work, purge private records and files.
+
+        Stage 1 sets a durable deleting tombstone to block worker claims and uploads.
+        Stage 2 removes the project artifact directory; failure leaves the tombstone
+        available for retry, never deleting another project's data.
+        Stage 3 deletes all associated SQLite rows in one transaction.
+        """
+        if not isinstance(pid, str) or not re.fullmatch(r'[a-f0-9]{12}', pid):
+            raise StoreError('Invalid project ID.')
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT * FROM projects WHERE id=?',(pid,)).fetchone()
+            if not row: raise StoreError('Unknown project ID.')
+            if not isinstance(confirmation,str) or confirmation != row['name']:
+                raise StoreError('Type the exact project name to confirm deletion.')
+            if row['status']!='deleting':
+                now=int(time.time())
+                db.execute("UPDATE projects SET status='deleting' WHERE id=?",(pid,))
+                db.execute("UPDATE messages SET status='cancelled',updated_at=? WHERE project_id=? AND status IN ('queued','processing','failed','blocked')",(now,pid))
+                mids=[r[0] for r in db.execute('SELECT id FROM meetings WHERE project_id=?',(pid,))]
+                for mid in mids:
+                    db.execute("UPDATE meetings SET status='cancelled',floor='human',epoch=epoch+1,ended_at=? WHERE id=? AND status IN ('live','scheduled')",(now,mid))
+                    db.execute("UPDATE meeting_turns SET status='cancelled' WHERE meeting_id=? AND status IN ('queued','processing')",(mid,))
+                self._event(db,pid,'project_deleting','human',{'name':row['name']})
+        # Only this project ID under the application's own data directory.
+        artifact_parent=(Path(self.filename).parent/'artifacts').resolve()
+        target=artifact_parent/pid
+        try:
+            if target.is_symlink():
+                target.unlink()
+            elif target.exists():
+                shutil.rmtree(target)
+        except OSError as exc:
+            raise StoreError('Could not remove all project files; retry Delete project. No other projects were affected.') from exc
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT status FROM projects WHERE id=?',(pid,)).fetchone()
+            if not row or row['status']!='deleting':
+                raise StoreError('Deletion state changed unexpectedly.')
+            mids=[r[0] for r in db.execute('SELECT id FROM meetings WHERE project_id=?',(pid,))]
+            for mid in mids:
+                db.execute('DELETE FROM meeting_messages WHERE meeting_id=?',(mid,))
+                db.execute('DELETE FROM meeting_turns WHERE meeting_id=?',(mid,))
+            db.execute('DELETE FROM meetings WHERE project_id=?',(pid,))
+            for table in ('rag_chunks','rag_indexes','rag_jobs','handoffs','artifacts','events','messages','project_intake'):
+                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():
+                    db.execute(f'DELETE FROM {table} WHERE project_id=?',(pid,))
+            db.execute('DELETE FROM llm_usage WHERE usage_key=?',(pid,)) if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='llm_usage'").fetchone() else None
+            db.execute('DELETE FROM projects WHERE id=?',(pid,))
+        return {'deleted':True,'project_id':pid}
 
     def _event(self,db,pid,kind,actor,payload):
         db.execute("INSERT INTO events(project_id,kind,actor,payload,created_at) VALUES(?,?,?,?,?)",
@@ -172,8 +226,8 @@ class Store:
             row=db.execute("SELECT status FROM projects WHERE id=?",(project_id,)).fetchone()
             if not row:
                 raise StoreError("Unknown project ID.")
-            if row["status"]=="approved":
-                raise StoreError("Approved projects are read-only. Create a new revision project.")
+            if row["status"] in {"approved","deleting"}:
+                raise StoreError("This project cannot accept new work.")
             count=db.execute("SELECT COUNT(*) FROM messages WHERE project_id=?",(project_id,)).fetchone()[0]
             if count>=MAX_MESSAGES_PER_PROJECT:
                 raise StoreError("Project reached its message budget; request a new revision.")
@@ -257,7 +311,7 @@ class Store:
         with self.db() as db:
             row=db.execute("SELECT * FROM messages WHERE id=?",(mid,)).fetchone()
             if not row:
-                raise StoreError("Unknown message.")
+                return False  # Project deleted while an OpenAI response was in flight.
             if row["status"]=="cancelled":
                 return False
             if row["status"]!="processing":
@@ -273,7 +327,7 @@ class Store:
         with self.db() as db:
             row=db.execute("SELECT * FROM messages WHERE id=?",(mid,)).fetchone()
             if not row:
-                raise StoreError("Unknown message.")
+                return False  # Project deleted while an OpenAI response was in flight.
             if row["status"]=="cancelled":
                 return False
             if row["status"]!="processing":

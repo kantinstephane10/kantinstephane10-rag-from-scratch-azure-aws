@@ -164,3 +164,24 @@ body.architecture-mode .workflow-view{max-width:none;margin:0 auto;padding:0 14p
 .agent-role-group{font-size:10px;color:#315f98;font-weight:650;overflow-wrap:anywhere}
 @media(max-width:1100px){.settings-columns,.agent-model-grid{grid-template-columns:1fr}}
 @media(max-width:600px){.settings-view{padding:15px 8px}.settings-panel{padding:14px}.settings-row,.model-edit-grid{grid-template-columns:1fr}.settings-numbers{grid-template-columns:1fr}.agent-model-row{grid-template-columns:1fr;gap:6px}}
+
+/* V1.3 — document execution and safely scoped project removal */
+.project-ledger-hint{padding:0 16px 9px;line-height:1.5}
+.project-ledger-entry{display:flex;align-items:center;gap:10px;justify-content:space-between;border-bottom:1px solid #edf1f6;padding:4px}
+.project-ledger-entry .project-item{min-width:0;flex:1;text-align:left;border:0;background:transparent}
+.project-ledger-entry .project-item b,.project-ledger-entry .project-item small{overflow-wrap:anywhere}
+.project-ledger-entry .project-delete-button{flex:0 0 auto;padding:8px 12px}
+.rag-panel{margin-top:20px;padding:18px;display:flex;flex-direction:column;gap:13px}
+.rag-panel[hidden]{display:none}
+.rag-panel .side-panel-title{padding:0 0 10px}
+.rag-state{color:#1a476e;background:#eaf3ff;border:1px solid #d9e7f8;border-radius:8px;padding:12px;line-height:1.5}
+.rag-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.rag-upload-label{display:flex;align-items:center;gap:8px}
+.rag-upload-label input{max-width:185px;padding:2px;font-size:11px}
+.rag-panel form{display:flex;flex-direction:column;gap:10px;max-width:800px}
+.rag-panel form button{align-self:flex-start}
+.rag-answer{background:#f6f9ff;border:1px solid #e0e8f5;border-radius:10px;padding:15px;white-space:normal;line-height:1.7}
+.rag-answer h3{margin:8px 0}.rag-generated-answer{white-space:pre-wrap;overflow-wrap:anywhere;color:#273c58;font-size:13px}
+.rag-source{padding:10px 0;border-top:1px solid #e0e8f5}.rag-source b{font-size:12px;color:#28569b}.rag-source p{white-space:pre-wrap;overflow-wrap:anywhere}
+.rag-caution{color:#9c5a2a;background:#fff8ec;border:1px solid #efe1c2;border-radius:8px;padding:10px}
+#delete-dialog .danger{background:#b92d43;border-color:#b92d43;color:#fff}
