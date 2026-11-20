@@ -331,7 +331,10 @@ def _manifest(db,store,pid,source,sender,recipient):
     rows=db.execute('SELECT * FROM artifacts WHERE project_id=? ORDER BY created_at DESC,id DESC LIMIT 40',(pid,)).fetchall()
     for row in rows:
         files.append({'id':row['id'],'name':row['name'],'sha256':row['sha256'],'size':row['size']})
+    from execution_workspace import list_files
+    workspace_files=list_files(store,pid)[:40]
     return {
+        'workspace_files':workspace_files,
         'from':sender,'to':recipient,'source_message_id':source['id'],
         'summary':source['reply'] or '',
         'files':files,
@@ -363,6 +366,11 @@ def _verified(db,store,hid,pid=None):
     if _digest(raw)!=row['digest']:
         raise StoreError('Handoff manifest integrity mismatch.')
     manifest=json.loads(raw)
+    from execution_workspace import read_version
+    for f in manifest.get('workspace_files',[]):
+        pinned=read_version(store,row['project_id'],f['sha256'])
+        if len(pinned)!=f['size']:
+            raise StoreError('Verified handoff source-version length mismatch.')
     for f in manifest['files']:
         ar=db.execute('SELECT * FROM artifacts WHERE id=? AND project_id=?',(f['id'],row['project_id'])).fetchone()
         if not ar or ar['sha256']!=f['sha256'] or ar['size']!=f['size']:

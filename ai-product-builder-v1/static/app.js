@@ -1,10 +1,10 @@
 'use strict';
 const $=id=>document.getElementById(id);
-const state={roles:{},layers:[],meetings:[],projects:[],selected:null,room:null,demo:false,renderedIds:'',view:'architecture',selectedTaskIds:new Set()};
+const state={roles:{},layers:[],meetings:[],projects:[],selected:null,room:null,demo:false,renderedIds:'',view:'architecture',selectedTaskIds:new Set(),multiuser:false,workspaceSha:null,releaseSelected:null};
 const nice=id=>id.replaceAll('-',' ').replace(/\b\w/g,c=>c.toUpperCase());
 const time=t=>t?new Date(t*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';
 const mk=(tag,attrs={},text)=>{const e=document.createElement(tag);for(const [k,v] of Object.entries(attrs)){if(k==='class')e.className=v;else if(k==='value')e.value=v;else e.setAttribute(k,v)}if(text!==undefined)e.textContent=text;return e;};
-async function api(url,options){const r=await fetch(url,{cache:'no-store',...options});let data={};try{data=await r.json()}catch{throw Error('Server returned an invalid response.')}if(!r.ok)throw Error(data.error||`HTTP ${r.status}`);return data;}
+async function api(url,options={}){const headers={...(options.headers||{})};if(options.method&&options.method!=='GET'&&sessionStorage.getItem('builder_csrf'))headers['X-CSRF-Token']=sessionStorage.getItem('builder_csrf');const r=await fetch(url,{cache:'no-store',credentials:'same-origin',...options,headers});let data={};try{data=await r.json()}catch{throw Error('Server returned an invalid response.')}if(!r.ok)throw Error(data.error||`HTTP ${r.status}`);return data;}
 async function post(url,obj={}){return api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});}
 function alertMessage(s){const a=$('alert');a.hidden=!s;a.textContent=s||'';if(s)setTimeout(()=>{if(a.textContent===s)a.hidden=true;},7000);}
 function switchView(view){
@@ -138,7 +138,7 @@ function renderProjects(){
   const entry=mk('div',{class:'project-ledger-entry'});
   const item=mk('button',{class:'project-item'+(state.projectSelected===project.id?' selected':''),type:'button'});
   item.append(mk('b',{},project.name),mk('small',{},project.status+' · '+project.id));
-  item.addEventListener('click',async()=>{state.projectSelected=project.id;state.selectedTask=null;state.selectedTaskIds.clear();renderProjects();await refreshActivity();await refreshRagStatus();await refreshWebsiteStatus();});
+  item.addEventListener('click',async()=>{state.projectSelected=project.id;state.selectedTask=null;state.workspaceSha=null;$('workspace-content').value='';$('workspace-filename').value='app.py';state.selectedTaskIds.clear();renderProjects();await refreshActivity();await refreshRagStatus();await refreshWebsiteStatus();await refreshWorkspace();await refreshReleases();});
   const del=mk('button',{class:'danger project-delete-button',type:'button','aria-label':'Delete project '+project.name},'Delete');
   del.addEventListener('click',()=>openDeleteDialog(project));
   entry.append(item);
@@ -164,6 +164,8 @@ async function refreshProjects(){
  if(state.projectSelected)await refreshActivity();else {state.activity=null;$('project-live').hidden=true;renderArchitecture();}
  await refreshRagStatus();
  await refreshWebsiteStatus();
+ await refreshWorkspace();
+ await refreshReleases();
 }
 
 function intakePayload(){const num=id=>Number($(id).value||'0');return {product_type:$('project-type').value,model_profile:$('model-profile').value,provider_consent:$('provider-consent').checked,estimated_hours:num('estimated-hours'),hourly_rate:num('hourly-rate'),one_time_expenses:num('one-time'),monthly_cost:num('monthly-cost'),contingency_pct:num('contingency')};}
@@ -262,6 +264,73 @@ async function refreshWebsiteStatus(){
   if($('website-iframe').getAttribute('src')!==urlWithVersion)$('website-iframe').src=urlWithVersion;
  }else $('website-iframe').removeAttribute('src');
 }
+
+async function refreshWorkspace(){
+ const pid=state.projectSelected,panel=$('workspace-panel');panel.hidden=!pid;
+ if(!pid)return;
+ const data=await api(`/api/projects/${pid}/workspace`);
+ if(pid!==state.projectSelected)return;
+ $('workspace-interpreter').textContent=`Interpreter: ${data.host_python}. Review scripts before running: Windows host execution is not sandboxed.`;
+ const root=$('workspace-file-list');root.replaceChildren();
+ for(const file of data.files){const btn=mk('button',{class:'secondary workspace-file-button',type:'button'},`${file.path} · ${file.size} bytes`);
+  btn.addEventListener('click',async()=>{$('workspace-filename').value=file.path;$('workspace-run-file').value=file.path;await loadWorkspaceFile()});root.append(btn)}
+ if(!data.files.length)root.textContent='No source files yet. Save app.py to begin.';
+ const runs=$('workspace-run-list');runs.replaceChildren();
+ for(const run of data.runs.slice(0,15)){const item=mk('button',{class:'secondary workspace-file-button',type:'button'},`${run.status} · ${run.command} · exit ${run.exit_code??'—'}`);
+  item.addEventListener('click',()=>{$('workspace-run-output').textContent=`Run ${run.id} (${run.status})\n${run.output||''}`});runs.append(item)}
+ if(!data.runs.length)runs.textContent='No recorded executions.';
+}
+async function loadWorkspaceFile(){
+ const pid=state.projectSelected;if(!pid)return;
+ const path=$('workspace-filename').value.trim();
+ try{const data=await api(`/api/projects/${pid}/workspace/file?path=${encodeURIComponent(path)}`);
+  $('workspace-content').value=data.content;state.workspaceSha=data.sha256;alertMessage('Loaded '+data.path+' with verified SHA-256.');}
+ catch(e){state.workspaceSha=null;alertMessage(e.message)}
+}
+async function saveWorkspaceFile(){
+ const pid=state.projectSelected;if(!pid)return;
+ try{const path=$('workspace-filename').value.trim();const old=state.workspaceSha;
+  const result=await post(`/api/projects/${pid}/workspace/file`,{path,content:$('workspace-content').value,expected_sha256:old});
+  state.workspaceSha=result.sha256;await refreshWorkspace();alertMessage(`Saved ${result.path} (${result.size} bytes).`);}
+ catch(e){alertMessage(e.message)}
+}
+async function runWindowsScript(){
+ const pid=state.projectSelected;const project=state.projects.find(p=>p.id===pid);if(!project)return;
+ const confirmation=$('workspace-confirmation').value;
+ if(confirmation!==project.name){alertMessage('Type the exact project name before running Python on your Windows host.');return;}
+ const command=$('workspace-command').value;
+ const filename=command==='script'?$('workspace-run-file').value.trim():command;
+ if(!confirm(`Execute ${filename} as your Windows user? This is NOT sandboxed and may access your files and network.`))return;
+ const btn=$('workspace-run');btn.disabled=true;$('workspace-run-output').textContent='Running under the server Python interpreter…';
+ try{const r=await post(`/api/projects/${pid}/workspace/run`,{filename,confirmation,timeout:90});
+  $('workspace-run-output').textContent=`${r.status.toUpperCase()} · exit ${r.exit_code??'not available'}\nInterpreter: ${r.interpreter}\n\n${r.output||''}`;
+  await refreshWorkspace();}
+ catch(e){$('workspace-run-output').textContent='Execution request rejected: '+e.message;alertMessage(e.message)}
+ finally{btn.disabled=false;$('workspace-confirmation').value=''}
+}
+async function refreshReleases(){
+ const project=state.projects.find(p=>p.id===state.projectSelected);const panel=$('release-panel');panel.hidden=!project||project.product_type!=='website'&&state.activity?.project?.intake?.product_type!=='website';
+ if(panel.hidden)return;
+ const rows=(await api(`/api/projects/${project.id}/releases`)).releases;
+ const root=$('release-items');root.replaceChildren();
+ for(const rel of rows){const b=mk('button',{type:'button',class:'secondary workspace-file-button'},`${rel.status} · ${rel.id} · generation ${rel.source_generation.slice(0,8)}`);
+  b.addEventListener('click',()=>{state.releaseSelected=rel.id;$('release-status').textContent=`Selected release ${rel.id}: ${rel.status}`});root.append(b)}
+ if(!rows.length)root.textContent='No releases yet.';
+}
+async function releaseAction(kind){
+ const pid=state.projectSelected;const name=state.projects.find(x=>x.id===pid)?.name;if(!pid)return;
+ const rid=state.releaseSelected;
+ if(kind!=='prepare'&&!rid){alertMessage('Select a prepared release first.');return;}
+ const base=`/api/projects/${pid}/releases`;
+ try{const result=await post(kind==='prepare'?base+'/prepare':base+'/'+rid+'/'+kind,
+  kind==='approve'?{confirmation:$('release-confirm').value}:{});
+  if(kind==='prepare')state.releaseSelected=result.id;
+  $('release-status').textContent=`${kind} completed: ${result.id} · ${result.status}`;
+  await refreshReleases();}
+ catch(e){alertMessage(e.message)}
+}
+function showSignIn(message){$('login-screen').hidden=false;$('login-error').textContent=message||'';$('login-user').focus()}
+
 async function buildWebsite(event){
  event.preventDefault();const pid=state.projectSelected;if(!pid)return;
  const button=$('website-build');button.disabled=true;
@@ -410,6 +479,7 @@ function uploadFile(url,file,progress){
  return new Promise((resolve,reject)=>{
   const xhr=new XMLHttpRequest();xhr.open('PUT',`${url}?name=${encodeURIComponent(file.name)}`);
   xhr.setRequestHeader('Content-Type','application/octet-stream');
+  if(sessionStorage.getItem('builder_csrf'))xhr.setRequestHeader('X-CSRF-Token',sessionStorage.getItem('builder_csrf'));
   xhr.upload.onprogress=e=>{if(e.lengthComputable&&progress)progress(`${file.name}: ${Math.round(100*e.loaded/e.total)}%`)};
   xhr.onerror=()=>reject(Error('Upload failed. Check the server and retry this file.'));
   xhr.onabort=()=>reject(Error('Upload cancelled.'));
@@ -460,7 +530,9 @@ async function submitCancelDialog(event){
  }catch(e){alertMessage(e.message);$('cancel-confirm').disabled=false}
 }
 async function init(){try{
- const [architecture,health,routeSettings]=await Promise.all([api('/api/architecture'),api('/api/health'),api('/api/settings')]);state.roles=architecture.roles;state.layers=architecture.layers;state.demo=health.offline_demo;$('metric-roles').textContent=Object.keys(state.roles).length;$('demo-label').textContent=health.offline_demo?'OFFLINE DEMO — no GPT calls.':health.api_key_configured?'OpenAI API key configured.':'OPENAI_API_KEY not configured.';renderModelRouting(routeSettings);renderArchitecture();
+ const health=await api('/api/health');state.multiuser=!!health.multiuser_required;
+ if(state.multiuser){try{await api('/api/auth/me')}catch(e){showSignIn('Sign in to access your projects.');return;}}
+ const [architecture,routeSettings]=await Promise.all([api('/api/architecture'),api('/api/settings')]);state.roles=architecture.roles;state.layers=architecture.layers;state.demo=health.offline_demo;$('metric-roles').textContent=Object.keys(state.roles).length;$('demo-label').textContent=health.offline_demo?'OFFLINE DEMO — no GPT calls.':health.api_key_configured?'OpenAI API key configured.':'OPENAI_API_KEY not configured.';renderModelRouting(routeSettings);renderArchitecture();
  await Promise.all([refreshProjects(),refreshMeetings()]);await refreshRoom();
 }catch(e){alertMessage('Initialization failed: '+e.message);}}
 function bind(){
@@ -492,6 +564,20 @@ function bind(){
  $('rag-question-form').addEventListener('submit',askRag);
  $('website-form').addEventListener('submit',buildWebsite);
  $('website-refresh').addEventListener('click',()=>refreshWebsiteStatus().catch(e=>alertMessage(e.message)));
+ $('workspace-refresh').addEventListener('click',()=>refreshWorkspace().catch(e=>alertMessage(e.message)));
+ $('workspace-load').addEventListener('click',loadWorkspaceFile);
+ $('workspace-save').addEventListener('click',saveWorkspaceFile);
+ $('workspace-run').addEventListener('click',runWindowsScript);
+ $('release-refresh').addEventListener('click',()=>refreshReleases().catch(e=>alertMessage(e.message)));
+ $('release-prepare').addEventListener('click',()=>releaseAction('prepare'));
+ $('release-approve').addEventListener('click',()=>releaseAction('approve'));
+ $('release-stage').addEventListener('click',()=>releaseAction('stage'));
+ $('workspace-filename').addEventListener('input',()=>{state.workspaceSha=null});
+ $('login-form').addEventListener('submit',async e=>{e.preventDefault();
+  try{const r=await post('/api/auth/login',{username:$('login-user').value,password:$('login-password').value});
+   sessionStorage.setItem('builder_csrf',r.csrf);$('login-password').value='';$('login-screen').hidden=true;await init();}
+  catch(err){showSignIn(err.message)}});
+
  $('readiness-refresh').addEventListener('click',()=>refreshReadiness().catch(e=>alertMessage(e.message)));
  $('delete-confirm-name').addEventListener('input',()=>{$('delete-project-confirm').disabled=!projectToDelete||$('delete-confirm-name').value!==projectToDelete.name});
  $('delete-project-form').addEventListener('submit',submitDeleteProject);

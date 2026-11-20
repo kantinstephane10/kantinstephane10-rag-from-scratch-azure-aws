@@ -37,6 +37,10 @@ class Store:
         init_handoffs(self)
         from meetings import init_meetings
         init_meetings(self)
+        from execution_workspace import init_workspace
+        init_workspace(self)
+        from release_management import init_releases
+        init_releases(self)
 
     @contextmanager
     def db(self):
@@ -253,6 +257,15 @@ class Store:
             delete_website(self, pid)
         except OSError as exc:
             raise StoreError('Could not delete project website; retry deletion.') from exc
+        # Purge execution workspaces and staged releases before deleting the project
+        # tombstone, so a failed filesystem cleanup remains safely retryable.
+        from execution_workspace import delete_workspace
+        from release_management import remove_releases
+        try:
+            delete_workspace(self,pid)
+            remove_releases(self,pid)
+        except OSError as exc:
+            raise StoreError('Project execution files could not be purged; retry deletion.') from exc
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
             row=db.execute('SELECT status FROM projects WHERE id=?',(pid,)).fetchone()
@@ -272,6 +285,8 @@ class Store:
                 db.execute('DELETE FROM rag_v2_chunks WHERE project_id=?',(pid,))
                 db.execute('DELETE FROM rag_v2_indexes WHERE project_id=?',(pid,))
                 db.execute('DELETE FROM rag_v2_jobs WHERE project_id=?',(pid,))
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='project_memberships'").fetchone():
+                db.execute('DELETE FROM project_memberships WHERE project_id=?',(pid,))
             for table in ('rag_chunks','rag_indexes','rag_jobs','handoffs','artifacts','events','messages','project_intake'):
                 if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():
                     db.execute(f'DELETE FROM {table} WHERE project_id=?',(pid,))
@@ -403,6 +418,18 @@ class Store:
             if needs_human:
                 db.execute("UPDATE projects SET status='awaiting_human' WHERE id=?",(row["project_id"],))
             return True
+
+    def append_worker_receipt(self, mid, pid, role, notes):
+        """Append server-verified source receipts after a completed GPT turn."""
+        if not notes:return
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT status FROM messages WHERE id=? AND project_id=?',(mid,pid)).fetchone()
+            if not row or row['status']!='done':
+                raise StoreError('Only completed tasks can receive execution receipts.')
+            message='\n\n[Workspace receipt: '+' '.join(notes)[:5000]+']'
+            db.execute('UPDATE messages SET reply=reply||? WHERE id=?',(message,mid))
+            self._event(db,pid,'workspace_receipt',role,{'task_id':mid,'notes':notes[:8]})
 
     def failure(self,mid,error,*,retryable,max_attempts=3):
         with self.db() as db:

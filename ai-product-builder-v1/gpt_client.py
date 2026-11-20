@@ -31,13 +31,20 @@ RESPONSE_SCHEMA = {
                 "required": ["artifact_id", "page", "offset", "query"],
                 "additionalProperties": False},
         },
+        "workspace_files": {
+            "type":"array",
+            "items":{"type":"object",
+                "properties":{"path":{"type":"string"},"content":{"type":"string"},
+                              "expected_sha256":{"type":["string","null"]}},
+                "required":["path","content","expected_sha256"],"additionalProperties":False},
+        },
         "meeting_requests": {
             "type": "array", "items": {"type": "object",
                 "properties": {"topic": {"type": "string"},
                                "attendees": {"type": "array", "items": {"type": "string"}}},
                 "required": ["topic", "attendees"], "additionalProperties": False}},
     },
-    "required": ["reply", "outgoing", "needs_human", "meeting_requests", "file_requests"],
+    "required": ["reply", "outgoing", "needs_human", "meeting_requests", "file_requests", "workspace_files"],
     "additionalProperties": False,
 }
 
@@ -58,8 +65,14 @@ def parse_response(data):
         or not isinstance(obj.get("needs_human"), bool)
         or not isinstance(obj.get("outgoing"), list)
         or not isinstance(obj.get("meeting_requests"), list)
-        or not isinstance(obj.get("file_requests",[]),list)):
+        or not isinstance(obj.get("file_requests",[]),list)
+        or not isinstance(obj.get("workspace_files",[]),list)):
         raise ModelError("GPT response does not match the required fields.")
+    for f in obj.get('workspace_files',[]):
+        if (not isinstance(f,dict) or not isinstance(f.get('path'),str) or
+            not isinstance(f.get('content'),str) or
+            f.get('expected_sha256') is not None and not isinstance(f.get('expected_sha256'),str)):
+            raise ModelError('GPT workspace-file proposal is malformed.')
     for request in obj.get("file_requests",[]):
         if (not isinstance(request,dict) or not isinstance(request.get('artifact_id'),str)
             or not isinstance(request.get('offset'),int)
@@ -123,4 +136,4 @@ class DemoClient:
         else:
             message = (f"[OFFLINE DEMO — NOT GPT] {role}: received '{question[:140]}'. "
                        "Proposed next step: validate requirements and produce reviewable evidence.")
-        return {"reply": message, "outgoing": [], "needs_human": False, "meeting_requests": [], "file_requests": []}
+        return {"reply": message, "outgoing": [], "needs_human": False, "meeting_requests": [], "file_requests": [], "workspace_files": []}

@@ -144,3 +144,7 @@ The Website Builder produces real static HTML/CSS source files, **not arbitrary 
 Open `http://127.0.0.1:8767/`. The `run_windows.ps1` launcher now accepts API keys configured in the UI without requiring an environment variable. Python 3.11–3.13 is the recommended tested ecosystem target; test external libraries carefully if your Anaconda interpreter is Python 3.14.
 
 **Production exclusions.** This local single-operator application still lacks multiuser authentication and fine-grained ACLs, hardened public TLS/auth/rate limiting, a sandboxed arbitrary code runner for all 49 agents, full CI/CD, reliable distributed job queue, restore drills, monitoring/alerting certification, and a measured 1 GiB end-to-end ingestion benchmark. The UI enumerates those gaps. Do **not** expose the built-in `ThreadingHTTPServer` directly to the internet.
+
+## V1.6 — Windows Python host execution, multiuser controls and operations
+
+See [RELEASE_NOTES_V1.6.md](RELEASE_NOTES_V1.6.md) for the implemented workspace, registered GPT source files, immutable handoff snapshots, Windows Python runner, opt-in multiuser sessions, ACLs, approved local release staging, request metrics and repeatable localhost load tests. Host Python is **not sandboxed** and requires human approval for each run. This release is **not** certified for unattended production deployment or internet exposure.

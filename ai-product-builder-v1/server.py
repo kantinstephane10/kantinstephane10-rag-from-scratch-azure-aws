@@ -14,6 +14,8 @@ import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from http.cookies import SimpleCookie
+from time import monotonic
 from urllib.parse import urlparse, parse_qs
 
 from architecture import blueprint
@@ -32,18 +34,30 @@ from large_rag import (init_large_rag, rag_status_large, start_large_index_job, 
 from hf_embeddings import DEFAULT_MODEL, MODELS as HF_MODELS
 from website_builder import build_website, website_status, website_file, website_zip
 from system_readiness import readiness
+from execution_workspace import (init_workspace, write_file, list_files, read_file,
+    runs as workspace_runs, run_windows_python, run_check as docker_check)
+from release_management import (init_releases, releases as project_releases, prepare as prepare_release,
+    approve as approve_release, stage as stage_release)
+from auth_security import UserAuth, AccessDenied
+from metrics_service import Metrics, capacity
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger(__name__)
 MAX_POST = 11_500_000  # Legacy JSON payloads; up to 1 GiB uses streaming PUT instead
 
 
-def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtime=None):
+def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtime=None,enable_multiuser=False):
     is_loopback = host in ('127.0.0.1','localhost','::1')
     if not is_loopback and not access_token:
         raise ValueError('Non-loopback binding requires BUILDER_ACCESS_TOKEN and TLS reverse proxy.')
     init_rag(store)
     init_large_rag(store)
+    init_workspace(store)
+    init_releases(store)
+    metrics=Metrics()
+    if enable_multiuser and not is_loopback:
+        raise ValueError('Multiuser mode is localhost-only; put an authenticated TLS proxy in front.')
+    user_auth=UserAuth(store) if enable_multiuser else None
 
     def rag_access(pid):
         project=store.project(pid)
@@ -72,12 +86,54 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
 
 
     class Handler(BaseHTTPRequestHandler):
-        server_version='AIProductBuilder/0.4'
+        server_version='AIProductBuilder/1.6'
+        _response_status=500
+        _principal=None
+        def send_response(self,code,message=None):
+            self._response_status=code
+            return super().send_response(code,message)
+
+        def _cookie_token(self):
+            try:
+                cookies=SimpleCookie(self.headers.get('Cookie',''))
+                return cookies['builder_session'].value if 'builder_session' in cookies else ''
+            except Exception:
+                return ''
+
+        def _require_scope(self,path,write=False):
+            if user_auth is None:return
+            person=self._principal
+            if not person:raise AccessDenied('Sign in required.')
+            if path.startswith('/api/system/') or (path.startswith('/api/settings') and write) or path.startswith('/api/providers/') or path in ('/api/metrics','/metrics'):
+                if not person['admin']:raise AccessDenied('Administrator access required.')
+            parts=path.split('/')
+            if len(parts)>3 and parts[1:3]==['api','projects'] and re.fullmatch(r'[a-f0-9]{12}',parts[3]):
+                level='editor' if write else 'viewer'
+                if write and ('delete' in parts or 'releases' in parts):level='owner'
+                if write and len(parts)>=5 and parts[4]=='workspace' and len(parts)>=6 and parts[5] in ('run','docker-check'):
+                    if not person['admin']:raise AccessDenied('Windows host execution requires an administrator.')
+                user_auth.require(person,parts[3],level)
+            elif len(parts)>3 and parts[1:3]==['api','meetings'] and re.fullmatch(r'[a-f0-9]{12}',parts[3]):
+                user_auth.require_meeting(person,parts[3],'editor' if write else 'viewer')
+            elif len(parts)>3 and parts[1:3]==['api','tasks']:
+                user_auth.require_task(person,parts[3],'editor' if write else 'viewer')
+
+        def _metric_class(self,path):
+            if path.startswith('/api/health'):return 'health'
+            if path.startswith('/api/auth/'):return 'auth'
+            for segment in ('workspace','releases','rag','website'):
+                if '/'+segment+'/' in path or path.endswith('/'+segment):return segment
+            if path.startswith('/api/settings') or path.startswith('/api/providers'):return 'settings'
+            if path.startswith('/api/projects'):return 'projects'
+            if path.startswith('/api/meetings'):return 'meetings'
+            if path.startswith('/api/system') or path.startswith('/api/metrics'):return 'other'
+            return 'static' if not path.startswith('/api/') else 'other'
 
         def log_message(self,format,*args):
             LOG.info('%s - %s',self.address_string(),format%args)
 
         def _authorized(self):
+            url=urlparse(self.path);path=url.path
             # DNS rebinding hardening in local mode. Never allow cross-host access.
             if is_loopback:
                 hostname=self.headers.get('Host','').split(':')[0].lower()
@@ -87,6 +143,19 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
             elif not hmac.compare_digest(self.headers.get('X-Builder-Token',''),access_token):
                 self._json(401,{'error':'Access token required.'})
                 return False
+            if user_auth and (path.startswith('/api/') or path=='/metrics') and path not in ('/api/auth/login','/api/health'):
+                token=self._cookie_token()
+                write=self.command in ('POST','PUT','DELETE','PATCH')
+                csrf=self.headers.get('X-CSRF-Token') if write else None
+                user=user_auth.session(token,csrf,write=write)
+                if user is None:
+                    self._json(401,{'error':'Sign in required or CSRF token missing.'})
+                    return False
+                self._principal=user
+                try:self._require_scope(path,write=write)
+                except AccessDenied as exc:
+                    self._json(403,{'error':str(exc)})
+                    return False
             return True
 
         def _json(self,status,value):
@@ -123,7 +192,8 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
             self.send_header('Cache-Control','no-store')
             self.send_header('Content-Security-Policy',
                              "default-src 'self'; connect-src 'self'; img-src 'self' data:; "
-                             "style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'")
+                             "style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+            self.send_header('X-Frame-Options','DENY')
             self.send_header('Content-Length',str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -203,9 +273,20 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                 elif path=='/app.js': self._file('app.js','application/javascript; charset=utf-8')
                 elif path=='/app.css': self._file('app.css','text/css; charset=utf-8')
                 elif path=='/icons.svg': self._file('icons.svg','image/svg+xml')
+                elif path=='/api/auth/me':
+                    self._json(200,{'username':self._principal['username'], 'admin':self._principal['admin']}
+                               if self._principal else {'username':'Local operator','admin':True,'single_user':True})
+                elif path=='/api/metrics':
+                    self._json(200,metrics.snapshot())
+                elif path=='/api/system/capacity':
+                    self._json(200,capacity(store))
+                elif path=='/metrics':
+                    raw=metrics.prometheus().encode('utf-8')
+                    self._binary(200,raw,'text/plain; version=0.0.4')
                 elif path=='/api/health':
                     self._json(200,{'status':'ok','llm':'OpenAI GPT','offline_demo':engine.demo,
-                                    'api_key_configured':bool(engine.client.key) if hasattr(engine.client,'key') else False})
+                                    'api_key_configured':bool(engine.client.key) if hasattr(engine.client,'key') else False,
+                                    'multiuser_required':bool(user_auth)})
                 elif path=='/api/system/readiness':
                     if not is_loopback: raise StoreError('Readiness inspection requires localhost.')
                     self._json(200,readiness(Path(store.filename).parent))
@@ -227,13 +308,26 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                 elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/website/download',path):
                     pid=path.split('/')[3]
                     self._binary(200,website_zip(store,pid),'application/zip',filename='website-'+pid+'.zip')
-                elif path=='/api/projects': self._json(200,{'projects':store.projects()})
+                elif path=='/api/projects':
+                    rows=store.projects()
+                    if user_auth:rows=user_auth.visible_projects(self._principal,rows)
+                    self._json(200,{'projects':rows})
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/workspace',path):
+                    pid=path.split('/')[3]
+                    self._json(200,{'files':list_files(store,pid),'runs':workspace_runs(store,pid),
+                                   'host_python':sys.executable,'host_risk':'Not sandboxed; administrator approval required per run.'})
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/workspace/file',path):
+                    pid=path.split('/')[3]
+                    file_path=parse_qs(url.query).get('path',[''])[0]
+                    self._json(200,read_file(store,pid,file_path))
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/releases',path):
+                    self._json(200,{'releases':project_releases(store,path.split('/')[3])})
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/rag/status',path):
                     self._json(200,rag_status_large(store,path.split('/')[3]))
                 elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/artifacts/[a-f0-9]{32}/text',path):
                     if not is_loopback: raise StoreError('File text access requires the local UI.')
                     parts=path.split('/');pid,aid=parts[3],parts[5]
-                    q=parse_qs(url.query)
+                    q=parse_qs(urlparse(self.path).query)
                     page=int(q['page'][0]) if q.get('page') else None
                     offset=int(q.get('offset',['0'])[0])
                     self._json(200,read_artifact_excerpt(store,pid,aid,page=page,offset=offset,
@@ -241,7 +335,7 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                 elif re.fullmatch(r'/api/meetings/[a-f0-9]{12}/artifacts/[a-f0-9]{32}/text',path):
                     if not is_loopback: raise StoreError('File text access requires the local UI.')
                     parts=path.split('/');mid,aid=parts[3],parts[5]
-                    q=parse_qs(url.query)
+                    q=parse_qs(urlparse(self.path).query)
                     page=int(q['page'][0]) if q.get('page') else None
                     offset=int(q.get('offset',['0'])[0])
                     self._json(200,read_meeting_artifact_excerpt(store,mid,aid,page=page,offset=offset,
@@ -257,7 +351,16 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                     self._json(200,{'handoffs':list_handoffs(store,pid)})
                 elif path=='/api/meetings':
                     params=parse_qs(url.query)
-                    self._json(200,{'meetings':list_meetings(store,params.get('project_id',[None])[0])})
+                    project_id=params.get('project_id',[None])[0]
+                    if user_auth and project_id:user_auth.require(self._principal,project_id,'viewer')
+                    rooms=list_meetings(store,project_id)
+                    if user_auth:
+                        visible=[]
+                        for room in rooms:
+                            if self._principal['admin'] or (room.get('project_id') and user_auth.role(self._principal,room['project_id'])):
+                                visible.append(room)
+                        rooms=visible
+                    self._json(200,{'meetings':rooms})
                 elif re.fullmatch(r'/api/meetings/[a-zA-Z0-9]+',path):
                     self._json(200,meeting(store,path.rsplit('/',1)[-1]))
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/usage',path):
@@ -279,7 +382,26 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
             path=urlparse(self.path).path
             try:
                 data=self._body()
-                if path=='/api/settings':
+                if path=='/api/auth/login':
+                    if not user_auth:raise StoreError('Multiuser login is disabled.')
+                    session=user_auth.login(data.get('username'),data.get('password'))
+                    encoded=json.dumps({'csrf':session['csrf'],'username':session['username'],
+                                        'admin':session['admin'],'expires_at':session['expires_at']}).encode('utf-8')
+                    self.send_response(200)
+                    self.send_header('Content-Type','application/json')
+                    self.send_header('Cache-Control','no-store')
+                    self.send_header('Set-Cookie','builder_session='+session['token']+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800')
+                    self.send_header('Content-Length',str(len(encoded)))
+                    self.end_headers();self.wfile.write(encoded)
+                elif path=='/api/auth/logout':
+                    if user_auth:user_auth.logout(self._cookie_token())
+                    self.send_response(200)
+                    self.send_header('Set-Cookie','builder_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
+                    body=b'{"logged_out":true}'
+                    self.send_header('Content-Type','application/json')
+                    self.send_header('Content-Length',str(len(body)))
+                    self.end_headers();self.wfile.write(body)
+                elif path=='/api/settings':
                     if runtime is None or not is_loopback: raise StoreError('Settings can only be changed on localhost.')
                     response=runtime.update(data);engine.apply_runtime();self._json(200,response)
                 elif path=='/api/settings/key':
@@ -292,6 +414,7 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                     if data.get('kickoff',False) and not engine.demo and data.get('intake',{}).get('provider_consent') is not True:
                         raise StoreError('Confirm provider consent before starting GPT workers.')
                     project=store.create_project(data.get('name',''),data.get('brief',''),intake=data.get('intake'))
+                    if user_auth:user_auth.own(self._principal,project['id'])
                     if project['intake']['product_type']=='website':
                         # The scoped static website can be built without a GPT key or code runner.
                         build_website(store,project['id'],data.get('website',{}))
@@ -299,6 +422,35 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                         engine.kickoff(project['id'])
                         auto_index(project['id'])
                     self._json(201,project)
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/workspace/file',path):
+                    pid=path.split('/')[3]
+                    result=write_file(store,pid,data.get('path'),data.get('content'),
+                                      actor=self._principal['username'] if self._principal else 'human',
+                                      expected_sha256=data.get('expected_sha256'))
+                    self._json(201,result)
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/workspace/run',path):
+                    if not is_loopback:raise StoreError('Windows execution is localhost-only.')
+                    if user_auth and not self._principal['admin']:
+                        raise AccessDenied('Only an administrator can authorize host Python runs.')
+                    pid=path.split('/')[3]
+                    self._json(200,run_windows_python(store,pid,data.get('filename'),
+                        confirmation=data.get('confirmation'),timeout=data.get('timeout',90),
+                        actor=self._principal['username'] if self._principal else 'human'))
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/workspace/docker-check',path):
+                    if not is_loopback:raise StoreError('Docker testing is localhost-only.')
+                    pid=path.split('/')[3]
+                    if data.get('confirmation')!=store.project(pid)['name']:
+                        raise StoreError('Confirm by typing the exact project name.')
+                    self._json(200,docker_check(store,pid,data.get('command'),actor='human'))
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/releases/prepare',path):
+                    self._json(201,prepare_release(store,path.split('/')[3]))
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/releases/[a-f0-9]{16}/approve',path):
+                    parts=path.split('/')
+                    self._json(200,approve_release(store,parts[3],parts[5],
+                        self._principal['username'] if self._principal else 'human',data.get('confirmation')))
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/releases/[a-f0-9]{16}/stage',path):
+                    parts=path.split('/')
+                    self._json(200,stage_release(store,parts[3],parts[5]))
                 elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/website/build',path):
                     if not is_loopback: raise StoreError('Website generation requires localhost.')
                     self._json(201,build_website(store,path.split('/')[3],data))
@@ -323,11 +475,13 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                                       runtime.model_for('rag-engineer')))
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/delete',path):
                     pid=path.split('/')[3]
+                    # Store's tombstone-based deletion also purges execution files,
+                    # immutable versions, staged releases and project membership rows.
                     self._json(200,store.delete_project(pid,data.get('confirmation')))
                 elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/artifacts/[a-f0-9]{32}/text',path):
                     if not is_loopback: raise StoreError('File text access requires the local UI.')
                     parts=path.split('/');pid,aid=parts[3],parts[5]
-                    q=parse_qs(url.query)
+                    q=parse_qs(urlparse(self.path).query)
                     page=int(q['page'][0]) if q.get('page') else None
                     offset=int(q.get('offset',['0'])[0])
                     self._json(200,read_artifact_excerpt(store,pid,aid,page=page,offset=offset,
@@ -335,7 +489,7 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                 elif re.fullmatch(r'/api/meetings/[a-f0-9]{12}/artifacts/[a-f0-9]{32}/text',path):
                     if not is_loopback: raise StoreError('File text access requires the local UI.')
                     parts=path.split('/');mid,aid=parts[3],parts[5]
-                    q=parse_qs(url.query)
+                    q=parse_qs(urlparse(self.path).query)
                     page=int(q['page'][0]) if q.get('page') else None
                     offset=int(q.get('offset',['0'])[0])
                     self._json(200,read_meeting_artifact_excerpt(store,mid,aid,page=page,offset=offset,
@@ -349,6 +503,10 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                     except (ValueError,binascii.Error): raise StoreError('Invalid base64 artifact content.')
                     self._json(201,save_artifact(store,pid,data.get('name',''),raw))
                 elif path=='/api/meetings':
+                    if user_auth and data.get('project_id'):
+                        user_auth.require(self._principal,data['project_id'],'editor')
+                    elif user_auth and not self._principal['admin']:
+                        raise AccessDenied('Standalone meetings require an administrator.')
                     start=int(data['starts_at']) if data.get('starts_at') is not None else None
                     self._json(201,create_meeting(store,topic=data.get('topic',''),participants=data.get('participants',[]),
                                                  requested_by='human',project_id=data.get('project_id') or None,
@@ -385,6 +543,16 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                 else: self._json(404,{'error':'Endpoint not found.'})
             except Exception as exc: self._handle_error(exc)
 
+    # Class methods keep the application compatible with the existing test harness.
+    for method_name in ('do_GET','do_POST','do_PUT'):
+        original=getattr(Handler,method_name)
+        def wrapped(self,*args,_original=original,_method=method_name,**kwargs):
+            started=metrics.enter()
+            try:return _original(self,*args,**kwargs)
+            finally:
+                metrics.leave(_method[3:],self._metric_class(urlparse(self.path).path),
+                              self._response_status,started)
+        setattr(Handler,method_name,wrapped)
     return ThreadingHTTPServer((host,port),Handler)
 
 
@@ -394,6 +562,7 @@ def main(argv=None):
     parser.add_argument('--port',type=int,default=int(os.getenv('BUILDER_PORT','8766')))
     parser.add_argument('--host',default=os.getenv('BUILDER_HOST','127.0.0.1'))
     parser.add_argument('--db',default=os.getenv('BUILDER_DB',str(ROOT/'data'/'builder.sqlite3')))
+    parser.add_argument('--multiuser',action='store_true',help='Require sign-in and project ACLs (localhost only)')
     args=parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(message)s')
     store=Store(args.db)
@@ -401,7 +570,8 @@ def main(argv=None):
     if args.demo and runtime.data['mode'] != 'demo':
         runtime.update({'mode':'demo'})
     engine=Engine(store,demo=True,runtime=runtime)
-    server=make_server(store,engine,args.host,args.port,os.getenv('BUILDER_ACCESS_TOKEN'),runtime)
+    server=make_server(store,engine,args.host,args.port,os.getenv('BUILDER_ACCESS_TOKEN'),runtime,
+                       enable_multiuser=args.multiuser)
     engine.start()
     print(f'AI Product Builder: http://{args.host}:{server.server_address[1]}/  | '
           f'{"OFFLINE DEMO (not GPT)" if engine.demo else "OPENAI GPT"}',flush=True)
