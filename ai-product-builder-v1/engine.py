@@ -98,9 +98,12 @@ class Engine:
             model=self._model(role,profile=project['intake']['model_profile'])
             instructions=(f"You are {role}, one of 49 specialist AI workers in a shared AI product engineering organization. "
                           f"Your mandate: {ROLES[role]} Deliverables: {', '.join(DELIVERABLES[role])}. "
-                          "You may communicate directly with ANY other registered specialist at any time by "
-                          "placing messages in the outgoing array; those messages enter a persistent shared mailbox. "
-                          "Ask concise, actionable questions; do not redundantly contact peers. "
+                          "You may communicate directly with ANY other registered specialist by "
+                          "placing messages in the outgoing array; those enter a persistent shared mailbox. "
+                          "Ask concise, actionable questions; avoid redundant or circular delegation. "
+                          f"You have {max(0,MAX_DEPTH-task['depth'])} remaining relay hops. "
+                          "If this is zero, do NOT send outgoing messages: complete your work and "
+                          "summarize any follow-up needed for the operator. "
                           "You may request no more than TWO peer messages in this turn. "
                           "You may also request ONE Product Manager-chaired meeting with any agent peers by adding "
                           "a meeting_requests item (topic and attendees list). Use this only for real blockers. "
@@ -127,28 +130,52 @@ class Engine:
             reply=outcome["reply"]
             if not isinstance(reply,str) or not reply.strip():
                 raise ModelError("GPT reply was empty.")
-            outgoing=outcome["outgoing"]
-            if len(outgoing)>2:
-                raise ModelError("Model attempted more than two peer messages.")
-            requested_meetings=outcome["meeting_requests"]
-            if len(requested_meetings)>1:
-                raise ModelError("Only one meeting request is permitted per agent turn.")
-            for request in requested_meetings:
-                if (not 1<=len(request["topic"].strip())<=280 or
-                    not 1<=len(request["attendees"])<=49 or
-                    any(a not in ROLES for a in request["attendees"])):
-                    raise ModelError("Agent attempted invalid meeting request.")
-            # Validate all outgoing messages before completing the parent to prevent partial relays.
-            if task["depth"]>=MAX_DEPTH and outgoing:
-                raise ModelError("Agent relay limit reached; no further peer messages allowed.")
-            for msg in outgoing:
-                if msg["recipient"] not in ROLES or not msg["message"].strip() or len(msg["message"])>6000:
-                    raise ModelError("Model attempted to send an invalid peer message.")
-                if msg["recipient"]==role:
-                    raise ModelError("Agents cannot send a new task to themselves.")
+            # A paid GPT answer must not be lost just because one optional peer
+            # delegation is malformed or exceeds the bounded workflow depth.
+            notices=[]
+            requested_outgoing=outcome.get('outgoing') or []
+            if not isinstance(requested_outgoing,list):
+                requested_outgoing=[]; notices.append('Malformed peer delegation ignored.')
+            outgoing=[]
+            if task['depth']>=MAX_DEPTH:
+                if requested_outgoing:
+                    notices.append('Further delegation stopped at the workflow relay safety boundary.')
+            else:
+                if len(requested_outgoing)>2:
+                    notices.append('Excess peer delegation requests were ignored.')
+                for msg in requested_outgoing[:2]:
+                    if (not isinstance(msg,dict) or msg.get('recipient') not in ROLES or
+                        not isinstance(msg.get('message'),str) or not msg['message'].strip() or
+                        len(msg['message'])>6000 or msg['recipient']==role):
+                        notices.append('Invalid or self-directed peer delegation ignored.')
+                        continue
+                    outgoing.append(msg)
+            requested_meetings=[]
+            raw_meetings=outcome.get('meeting_requests') or []
+            if not isinstance(raw_meetings,list):
+                raw_meetings=[]; notices.append('Malformed meeting request ignored.')
+            if len(raw_meetings)>1:
+                notices.append('Excess meeting requests were ignored.')
+            for request in raw_meetings[:1]:
+                if (not isinstance(request,dict) or
+                    not isinstance(request.get('topic'),str) or
+                    not 1<=len(request['topic'].strip())<=280 or
+                    not isinstance(request.get('attendees'),list) or
+                    not 1<=len(request['attendees'])<=49 or
+                    any(not isinstance(a,str) or a not in ROLES for a in request['attendees'])):
+                    notices.append('Invalid meeting request ignored.')
+                    continue
+                requested_meetings.append(request)
+            if notices:
+                reply += '\n\n[Workflow notice: ' + ' '.join(dict.fromkeys(notices)) + ']'
             published=self.store.complete(task["id"],model,reply,needs_human=outcome["needs_human"])
             if not published:
                 return True  # Cancelled during inference; no relay or meeting may be spawned.
+            if notices:
+                try:
+                    self.store.record_worker_notice(pid,role,task['id'],notices)
+                except Exception:
+                    LOG.exception('Unable to persist delegation suppression notice for %s',task['id'])
             if handoff is not None:
                 from handoffs import acknowledge_handoff
                 acknowledge_handoff(self.store,task['handoff_id'],pid)
@@ -167,11 +194,15 @@ class Engine:
                     LOG.warning("Peer message suppressed: %s",exc)
             return True
         except ModelError as exc:
-            self.store.failure(task["id"],str(exc),retryable=exc.retryable)
+            if self.store.message(task['id'])['status']=='processing':
+                self.store.failure(task['id'],str(exc),retryable=exc.retryable)
+            else:
+                LOG.warning('Non-publish model error for already final task %s: %s',task['id'],exc)
             return True
         except Exception as exc:
             LOG.exception("Unexpected failure processing %s",task["id"])
-            self.store.failure(task["id"],f"Unexpected worker failure: {type(exc).__name__}",retryable=False)
+            if self.store.message(task['id'])['status']=='processing':
+                self.store.failure(task['id'],f"Unexpected worker failure: {type(exc).__name__}",retryable=False)
             return True
 
     def _process_meeting(self,turn):

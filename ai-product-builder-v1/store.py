@@ -11,7 +11,7 @@ from uuid import uuid4
 from roles import ROLES
 from intake import validate_intake
 
-MAX_DEPTH = 4
+MAX_DEPTH = 12
 MAX_MESSAGES_PER_PROJECT = 250
 MAX_MESSAGE_LENGTH = 6000
 MAX_CANCEL_BATCH = 100
@@ -340,10 +340,15 @@ class Store:
             self._event(db,row["project_id"],"agent_failed",row["recipient"],{"id":mid,"status":state,"error":str(error)[:200]})
             return True
 
-    def retry(self,mid):
+    def retry(self,mid,project_id=None):
         with self.db() as db:
             row=db.execute("SELECT * FROM messages WHERE id=?",(mid,)).fetchone()
-            if not row or row["status"]!="failed": raise StoreError("Only failed messages can be retried.")
+            if not row or (project_id is not None and row['project_id']!=project_id):
+                raise StoreError('Task does not belong to the selected project.')
+            if row["status"]!="failed": raise StoreError("Only failed messages can be retried.")
+            project=db.execute('SELECT status FROM projects WHERE id=?',(row['project_id'],)).fetchone()
+            if not project or project['status'] not in ('in_progress','awaiting_human'):
+                raise StoreError('This project does not accept retried work.')
             db.execute("UPDATE messages SET status='queued',attempts=0,error=NULL,next_attempt_at=0 WHERE id=?",(mid,))
             self._event(db,row["project_id"],"manual_retry","human",{"id":mid})
 
@@ -422,9 +427,26 @@ class Store:
             self._event(db,pid,"human_approved",operator.strip(),{"confirmation":confirmation})
 
     def recover_processing(self):
-        """On server restart, make interrupted work eligible again without losing messages."""
+        """Recover interrupted work and the legacy (pre-V1.3.1) relay-limit bug.
+
+        Only the exact known deterministic failure is requeued. Other failures
+        remain available for operator review. Replaying a GPT call may be billed.
+        """
         with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
             ids=[r[0] for r in db.execute("SELECT id FROM messages WHERE status='processing'")]
             for mid in ids:
                 db.execute("UPDATE messages SET status='queued',next_attempt_at=0,error='Recovered after restart' WHERE id=?",(mid,))
-            return len(ids)
+            legacy=list(db.execute("""SELECT id,project_id,recipient FROM messages
+                WHERE status='failed' AND error='Agent relay limit reached; no further peer messages allowed.'
+                  AND project_id IN (SELECT id FROM projects WHERE status IN ('in_progress','awaiting_human'))"""))
+            for row in legacy:
+                db.execute("UPDATE messages SET status='queued',next_attempt_at=0,attempts=0,error='Recovered legacy relay-limit failure' WHERE id=?",(row['id'],))
+                self._event(db,row['project_id'],'legacy_relay_recovered','system',{'id':row['id'],'recipient':row['recipient']})
+            return len(ids)+len(legacy)
+
+    def record_worker_notice(self, pid, role, message_id, messages):
+        """Audit suppressed model requests without mistaking them for work done."""
+        with self.db() as db:
+            self._event(db,pid,'agent_delegation_suppressed',role,
+                        {'message_id':message_id,'notices':[str(item)[:150] for item in messages[:6]]})

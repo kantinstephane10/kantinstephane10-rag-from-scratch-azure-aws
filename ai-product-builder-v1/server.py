@@ -236,7 +236,7 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                     elif action=='approve':
                         store.approve(pid,data.get('confirmation'),data.get('operator',''));result=store.project(pid)
                     elif action=='resume': store.resume(pid);result=store.project(pid)
-                    else: store.retry(data.get('message_id',''));result={'retried':True}
+                    else: store.retry(data.get('message_id',''),project_id=pid);result={'retried':True}
                     self._json(200,result)
 
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/cancel-tasks',path):
