@@ -87,8 +87,8 @@ class Store:
                 if name not in columns:
                     db.execute(f'ALTER TABLE messages ADD COLUMN {name} {datatype}')
 
-    def reserve_llm_call(self, usage_key, max_calls, max_tokens):
-        """Atomically reserve one call. Limits apply before requests, not within them."""
+    def reserve_llm_call(self, usage_key, max_calls=None, max_tokens=None):
+        """Atomically count requests for reporting only; never block on usage totals."""
         if not isinstance(usage_key,str) or len(usage_key)>100:
             raise StoreError('Invalid usage key.')
         with self.db() as db:
@@ -99,8 +99,6 @@ class Store:
             row=db.execute('SELECT * FROM llm_usage WHERE usage_key=?',(usage_key,)).fetchone()
             calls = row['call_count'] if row else 0
             tokens = row['total_tokens'] if row else 0
-            if calls >= max_calls or tokens >= max_tokens:
-                raise StoreError('GPT budget reached: new model calls are blocked until limits are increased.')
             db.execute('''INSERT INTO llm_usage (usage_key, call_count, total_tokens) VALUES (?,1,0)
                        ON CONFLICT(usage_key) DO UPDATE SET call_count=call_count+1''',(usage_key,))
             return {'call_count':calls+1,'total_tokens':tokens}
@@ -233,7 +231,7 @@ class Store:
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
             row=db.execute("""SELECT m.* FROM messages m JOIN projects p ON p.id=m.project_id
-                              WHERE m.status='queued' AND m.next_attempt_at<=? AND p.status='in_progress'
+                              WHERE m.status='queued' AND m.next_attempt_at<=? AND p.status IN ('in_progress','awaiting_human')
                               ORDER BY m.created_at,m.rowid LIMIT 1""",(now,)).fetchone()
             if not row: return None
             if row['sender']!='human':

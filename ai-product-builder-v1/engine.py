@@ -19,8 +19,7 @@ class Engine:
         self.runtime = runtime
         if runtime is not None:
             demo = runtime.data['mode'] == 'demo'
-        self.client = client or (DemoClient() if demo else GPTClient(api_key=runtime.key if runtime else None,
-            max_output_tokens=runtime.data['max_output_tokens'] if runtime else 900))
+        self.client = client or (DemoClient() if demo else GPTClient(api_key=runtime.key if runtime else None))
         self.demo = demo
         self.poll = poll
         self.shutdown = Event()
@@ -32,8 +31,7 @@ class Engine:
         if self.runtime is None: return
         snapshot=self.runtime.snapshot()
         demo=snapshot['mode']=='demo'
-        self.client=DemoClient() if demo else GPTClient(api_key=self.runtime.key,
-                             max_output_tokens=snapshot['max_output_tokens'])
+        self.client=DemoClient() if demo else GPTClient(api_key=self.runtime.key)
         self.demo=demo
 
     def _model(self, role, *, meeting=False, profile='standard'):
@@ -44,9 +42,8 @@ class Engine:
     def _reserve(self, usage_key):
         if self.runtime is None or self.demo:
             return
-        limits=self.runtime.snapshot()
-        self.store.reserve_llm_call(usage_key,limits['max_calls_per_project'],
-                                    limits['max_total_tokens_per_project'])
+        # Record actual usage only; no project call or token ceiling is enforced.
+        self.store.reserve_llm_call(usage_key)
 
     def _record(self, usage_key, outcome):
         if self.runtime is not None and not self.demo:

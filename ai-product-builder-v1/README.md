@@ -56,3 +56,11 @@ Use **Meeting studio** to watch Product Manager-chaired agent conversations, tak
 ```
 
 Node.js is optional for a JS syntax check: `node --check static/app.js`. Offline Python, localhost HTTP, and browser layout tests were performed here; Windows DPAPI and live paid OpenAI inference require verification on the user's Windows computer.
+
+
+## V1.2 — Automatic advisory work and uncapped GPT usage
+
+- Removed locally configured output, per-project GPT call, and token caps. GPT requests no longer send `max_output_tokens`; provider-side limits and billing still apply. Existing persisted cap keys are ignored.
+- Usage counters remain visible but no longer block subsequent GPT work.
+- Already-queued advisory planning tasks continue even when an agent requested human review. Human approval for protected releases remains mandatory.
+- Queue processing is sequential and respects mandatory verified handoffs; a task may still block on invalid handoffs, provider errors, cancellation, or missing consent.
