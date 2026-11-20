@@ -85,3 +85,22 @@ The index is invalidated when indexed document sets change, and downstream answe
 ### Validation scope
 
 82 automated tests passed in this build, including actual PDF extraction with an installed PyMuPDF interpreter and mocked embedding/answer services, integrity, indexing failures, stale index detection, deletion isolation and HTTP deletion endpoints, and invalid-meeting-question resilience. JavaScript syntax and Python compilation checks also passed. **No paid OpenAI model calls or actual Windows DPAPI execution were run as part of these tests.**
+
+## V1.3.1 — reliable multi-agent relay recovery
+
+- Fixed the `Agent relay limit reached; no further peer messages allowed.` failure: a worker's valid written result is now saved even when its optional delegation is suppressed. The event is recorded and disclosed in the worker's response.
+- Expanded the bounded agent-to-agent chain from 4 to 12 hops. This is a **workflow safety guard, not a GPT token cap**. At the final hop, further requests are dropped safely and the worker explains any follow-up needed; no infinite agent loop is permitted.
+- On startup, legacy failed messages carrying the exact old relay-limit error are requeued once automatically, including messages in projects awaiting human review. Retrying an old paid GPT request can incur another charge.
+- The Live Agent Activity pane now has a **Retry failed task** button for other failures. The retry API verifies that the task belongs to the selected project.
+- Invalid optional delegation and meeting requests no longer discard an otherwise valid worker answer. Supported release and human-approval gates are unchanged.
+
+From an existing `ai-product-builder-v1` directory on Windows:
+
+```powershell
+git fetch origin refs/heads/feat/ai-product-builder-v131-relay-recovery
+git switch -c feat/ai-product-builder-v131-relay-recovery FETCH_HEAD
+& "$HOME\anaconda3\python.exe" -m unittest discover -s tests -v
+& "$HOME\anaconda3\python.exe" server.py --port 8767
+```
+
+This package does **not** promise autonomous production code generation, CI/CD, or deployment. For a real RAG artifact, use the Document RAG execution panel and inspect its recorded build/index/test evidence.
