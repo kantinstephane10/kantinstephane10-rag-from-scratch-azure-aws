@@ -104,3 +104,8 @@ git switch -c feat/ai-product-builder-v131-relay-recovery FETCH_HEAD
 ```
 
 This package does **not** promise autonomous production code generation, CI/CD, or deployment. For a real RAG artifact, use the Document RAG execution panel and inspect its recorded build/index/test evidence.
+
+
+## Mandatory Business Analyst participation (V1.3.2)
+
+Every **newly kicked-off project** schedules Business Analyst 1 and Business Analyst 2 before the Product Manager's kickoff. The Product Manager cannot begin until both initial reviews finish or terminate; the PM receives both recorded assessments and must flag any failed review. These three assignments are inserted atomically and persist across restart. No extra agent relay-depth or token caps are imposed. Existing project histories are not rewritten automatically.

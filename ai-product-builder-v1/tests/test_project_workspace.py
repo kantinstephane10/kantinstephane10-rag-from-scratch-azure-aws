@@ -123,8 +123,9 @@ class WorkspaceHttpTests(WorkspaceTests):
         self.assertEqual(p['intake']['estimated_total'], 400.0)
         with urlopen(self.base+'/api/projects/'+p['id']+'/activity', timeout=3) as response:
             activity=json.load(response)
-        self.assertEqual(activity['counts']['queued'],1)
-        self.assertEqual(activity['messages'][0]['recipient'],'product-manager')
+        self.assertEqual(activity['counts']['queued'],3)
+        self.assertEqual([m['recipient'] for m in activity['messages']],
+                         ['business-analyst-1','business-analyst-2','product-manager'])
 
 
     def test_http_cancel_task(self):

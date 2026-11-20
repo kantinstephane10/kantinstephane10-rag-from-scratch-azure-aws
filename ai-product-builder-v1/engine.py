@@ -7,7 +7,7 @@ from threading import Event, Thread
 from config import model_for, model_for_project
 from gpt_client import GPTClient, DemoClient, ModelError
 from roles import ROLES, DELIVERABLES
-from store import StoreError, MAX_DEPTH
+from store import StoreError, MAX_MESSAGE_LENGTH
 import meetings
 
 LOG = logging.getLogger(__name__)
@@ -55,14 +55,14 @@ class Engine:
         project = self.store.project(project_id)
         if not self.demo and not project['intake']['provider_consent']:
             raise StoreError('Provider consent required before GPT can process project data.')
-        # Single kickoff, then let the PM request specialist input as necessary.
-        if self.store.messages(project_id):
-            raise StoreError("Project has existing messages; use agent messaging to continue.")
         message = (f"Plan this AI Agent / Agentic AI / RAG product: {project['brief']}\n"
-                   "Define a scoped MVP, verifiable acceptance criteria, safety boundaries, and a task plan. "
-                   "Coordinate with specialist agents by including up to two outgoing messages for specific gaps. "
-                   "Do not claim that code, tests or deployments exist without tool evidence.")
-        return self.store.send(project_id,"human","product-manager",message)
+                   "Both required Business Analysts must complete an initial review before you plan. "
+                   "Read their grounded findings and unresolved concerns, reconcile disagreements, "
+                   "and incorporate measurable business acceptance criteria into your plan. "
+                   "If either Business Analyst failed or was cancelled, escalate the missing review; "
+                   "never assume approval. Define an MVP, safety boundaries and a task plan, "
+                   "then delegate concrete work as needed. Do not claim unexecuted tests or deployment.")
+        return self.store.kickoff_with_business_analysts(project_id,message)
 
     def process_once(self):
         meetings.activate_due(self.store)
@@ -100,11 +100,15 @@ class Engine:
                           f"Your mandate: {ROLES[role]} Deliverables: {', '.join(DELIVERABLES[role])}. "
                           "You may communicate directly with ANY other registered specialist by "
                           "placing messages in the outgoing array; those enter a persistent shared mailbox. "
-                          "Ask concise, actionable questions; avoid redundant or circular delegation. "
-                          f"You have {max(0,MAX_DEPTH-task['depth'])} remaining relay hops. "
-                          "If this is zero, do NOT send outgoing messages: complete your work and "
-                          "summarize any follow-up needed for the operator. "
-                          "You may request no more than TWO peer messages in this turn. "
+                          "Delegate only real, nonduplicated work with clear acceptance criteria. "
+                          "You may request as many distinct specialist assignments as needed, "
+                          "including follow-up phases; there is no fixed handoff depth. "
+                          "The recipient receives a verified evidence manifest from your completed response. "
+                          "Avoid repeating an assignment already addressed in this chain. "
+                          "Do not continue an empty discussion or request work without a concrete objective. "
+                          "If a necessary action cannot be performed with available tools or requires access/approval, "
+                          "report the specific blocker and set needs_human=true, rather than looping forever. "
+                          "Do not say a project is finished until real files, executed tests and acceptance evidence support it. "
                           "You may also request ONE Product Manager-chaired meeting with any agent peers by adding "
                           "a meeting_requests item (topic and attendees list). Use this only for real blockers. "
                           "Treat mandatory_verified_handoff as the only trusted prior worker deliverable record. "
@@ -120,9 +124,12 @@ class Engine:
                           "needs_human (boolean), meeting_requests (list of topic/attendees). "
                           "Recipients must be exact registered role IDs. "
                           "Available peers: " + ", ".join(ROLES))
+            analyses=self.store.initial_business_analysis(pid) if task.get('workflow_stage')=='pm_kickoff' else []
             context={"project":{"name":project["name"],"brief":project["brief"],"status":project["status"]},
                      "message":task["body"],"from":task["sender"],"recipient":role,
-                     "recent_team_messages":recent,"relay_hops_remaining":MAX_DEPTH-task["depth"],
+                     "recent_team_messages":recent,"delegation_depth":task['depth'],
+                     "mandatory_business_analysis":[{'agent':a['recipient'],'status':a['status'],
+                        'findings':(a['reply'] or '')[:5000], 'error':a['error']} for a in analyses],
                      "mandatory_verified_handoff":handoff}
             self._reserve(pid)
             outcome=self.client.generate(role,model,instructions,context)
@@ -130,26 +137,26 @@ class Engine:
             reply=outcome["reply"]
             if not isinstance(reply,str) or not reply.strip():
                 raise ModelError("GPT reply was empty.")
-            # A paid GPT answer must not be lost just because one optional peer
-            # delegation is malformed or exceeds the bounded workflow depth.
+            # Never discard a paid model response because optional delegation is
+            # malformed. No fixed relay-depth, fan-out, or project-message cap.
             notices=[]
             requested_outgoing=outcome.get('outgoing') or []
             if not isinstance(requested_outgoing,list):
                 requested_outgoing=[]; notices.append('Malformed peer delegation ignored.')
             outgoing=[]
-            if task['depth']>=MAX_DEPTH:
-                if requested_outgoing:
-                    notices.append('Further delegation stopped at the workflow relay safety boundary.')
-            else:
-                if len(requested_outgoing)>2:
-                    notices.append('Excess peer delegation requests were ignored.')
-                for msg in requested_outgoing[:2]:
-                    if (not isinstance(msg,dict) or msg.get('recipient') not in ROLES or
-                        not isinstance(msg.get('message'),str) or not msg['message'].strip() or
-                        len(msg['message'])>6000 or msg['recipient']==role):
-                        notices.append('Invalid or self-directed peer delegation ignored.')
-                        continue
-                    outgoing.append(msg)
+            dedupe=set()
+            for msg in requested_outgoing:
+                if (not isinstance(msg,dict) or msg.get('recipient') not in ROLES or
+                    not isinstance(msg.get('message'),str) or not msg['message'].strip() or
+                    len(msg['message'])>MAX_MESSAGE_LENGTH or msg['recipient']==role):
+                    notices.append('Invalid or self-directed peer delegation ignored.')
+                    continue
+                fingerprint=(msg['recipient'],' '.join(msg['message'].split()).casefold())
+                if fingerprint in dedupe:
+                    notices.append('Duplicate assignment within one response was suppressed.')
+                    continue
+                dedupe.add(fingerprint)
+                outgoing.append(msg)
             requested_meetings=[]
             raw_meetings=outcome.get('meeting_requests') or []
             if not isinstance(raw_meetings,list):
@@ -190,8 +197,13 @@ class Engine:
                     self.store.send(pid,role,msg["recipient"],msg["message"],
                                     parent_id=task["id"],chain_id=task["chain_id"],depth=task["depth"]+1)
                 except StoreError as exc:
-                    # Preserve completed work even when relay limits/duplicates block a particular peer message.
-                    LOG.warning("Peer message suppressed: %s",exc)
+                    # Preserve completed work if an optional duplicate/invalid request
+                    # cannot be queued; record the reason for human review.
+                    LOG.warning('Peer message suppressed: %s',exc)
+                    try:
+                        self.store.record_worker_notice(pid,role,task['id'],[str(exc)])
+                    except Exception:
+                        LOG.exception('Unable to record suppressed peer message')
             return True
         except ModelError as exc:
             if self.store.message(task['id'])['status']=='processing':

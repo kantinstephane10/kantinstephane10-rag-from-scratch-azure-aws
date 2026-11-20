@@ -176,8 +176,9 @@ class CancellationHTTPTests(unittest.TestCase):
         self.post(f"/api/projects/{p['id']}/kickoff",{})
         with urlopen(f"{self.root}/api/projects/{p['id']}/activity",timeout=4) as resp:
             data=json.load(resp)
-        self.assertEqual(data['counts']['queued'],1)
-        self.assertEqual(data['messages'][0]['recipient'],'product-manager')
+        self.assertEqual(data['counts']['queued'],3)
+        self.assertEqual([m['recipient'] for m in data['messages']],
+                         ['business-analyst-1','business-analyst-2','product-manager'])
 
     def test_http_single_bulk_meeting_require_reasons(self):
         _,p=self.post('/api/projects',{'name':'AI Builder','brief':'Design a RAG', 'kickoff':False})

@@ -11,8 +11,8 @@ from uuid import uuid4
 from roles import ROLES
 from intake import validate_intake
 
-MAX_DEPTH = 12
-MAX_MESSAGES_PER_PROJECT = 250
+# Delegation follows verified handoff ancestry instead of a hard numerical hop limit.
+# No fixed project message count; exact duplicate work is suppressed to avoid loops.
 MAX_MESSAGE_LENGTH = 6000
 MAX_CANCEL_BATCH = 100
 CANCELLABLE_STATES = ('queued', 'processing', 'failed', 'blocked')
@@ -85,7 +85,8 @@ class Store:
             # Add metadata on existing v0.9 SQLite files without dropping history.
             columns = {row['name'] for row in db.execute('PRAGMA table_info(messages)')}
             for name, datatype in [('cancel_reason', 'TEXT'), ('cancelled_at', 'INTEGER'),
-                                   ('cancelled_by', 'TEXT')]:
+                                   ('cancelled_by', 'TEXT'),
+                                   ('workflow_stage', "TEXT NOT NULL DEFAULT 'normal'")]:
                 if name not in columns:
                     db.execute(f'ALTER TABLE messages ADD COLUMN {name} {datatype}')
 
@@ -140,6 +141,59 @@ class Store:
                      config['monthly_cost'],config['contingency_pct'],config['estimated_total'],config['currency']))
             self._event(db,pid,"project_created","human",{"name":name.strip()})
         return self.project(pid)
+
+    def kickoff_with_business_analysts(self, project_id, manager_prompt):
+        """Atomically assign both required analysts before the PM kickoff.
+
+        The PM kickoff may be claimed only once both initial BA tasks finish or
+        explicitly fail/cancel. No partial kickoff or duplicate wave is allowed.
+        """
+        if not isinstance(manager_prompt,str) or not manager_prompt.strip() or len(manager_prompt)>MAX_MESSAGE_LENGTH:
+            raise StoreError('Invalid Product Manager kickoff assignment.')
+        now=int(time.time())
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            project=db.execute('SELECT name,brief,status FROM projects WHERE id=?',(project_id,)).fetchone()
+            if not project or project['status'] not in ('draft','in_progress'):
+                raise StoreError('Project cannot start a new kickoff.')
+            if db.execute('SELECT 1 FROM messages WHERE project_id=? LIMIT 1',(project_id,)).fetchone():
+                raise StoreError('Project has existing messages; use agent messaging to continue.')
+            assignments=[
+                ('business-analyst-1',
+                 'Required initial business analysis: assess the problem, stakeholders, end users, user stories, '
+                 'success metrics, scope, acceptance criteria, data ownership and explicit approval needs. '
+                 'Report confirmed facts versus assumptions; do not invent authorization or tests. '
+                 'Project brief: '+project['brief'], 'mandatory_business_analysis'),
+                ('business-analyst-2',
+                 'Required independent business analysis: challenge assumptions, identify exceptions, '
+                 'operational workflows, compliance and data-access constraints, cost/benefit and failure cases. '
+                 'Define measurable acceptance criteria and open questions. '
+                 'Project brief: '+project['brief'], 'mandatory_business_analysis'),
+                ('product-manager', manager_prompt, 'pm_kickoff'),
+            ]
+            tasks=[]
+            for role,body,stage in assignments:
+                if len(body)>MAX_MESSAGE_LENGTH:
+                    raise StoreError('Project brief is too long for mandatory analyst kickoff. Shorten the brief.')
+                mid=uuid4().hex
+                db.execute("""INSERT INTO messages(id,project_id,sender,recipient,body,chain_id,
+                    parent_id,depth,created_at,updated_at,workflow_stage)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                    (mid,project_id,'human',role,body,mid,None,0,now,now,stage))
+                self._event(db,project_id,'message_queued','human',{'id':mid,'to':role,'workflow_stage':stage})
+                tasks.append(mid)
+            db.execute("UPDATE projects SET status='in_progress' WHERE id=? AND status='draft'",(project_id,))
+            self._event(db,project_id,'mandatory_business_analysis_started','system',
+                        {'business_analysts':['business-analyst-1','business-analyst-2'],
+                         'product_manager':tasks[-1]})
+        return self.message(tasks[-1])
+
+    def initial_business_analysis(self, project_id):
+        """Return status and grounded work from mandatory BA kickoff tasks."""
+        with self.db() as db:
+            return [dict(row) for row in db.execute("""SELECT recipient,status,reply,error,id
+                FROM messages WHERE project_id=? AND workflow_stage='mandatory_business_analysis'
+                ORDER BY created_at,rowid""",(project_id,))]
 
     def project(self,pid):
         with self.db() as db:
@@ -219,8 +273,8 @@ class Store:
             raise StoreError("Recipient must be a registered AI agent.")
         if not isinstance(body,str) or not body.strip() or len(body)>MAX_MESSAGE_LENGTH:
             raise StoreError(f"Message must contain 1–{MAX_MESSAGE_LENGTH} characters.")
-        if not isinstance(depth,int) or not 0 <= depth <= MAX_DEPTH:
-            raise StoreError("Agent relay depth exceeded.")
+        if isinstance(depth,bool) or not isinstance(depth,int) or depth < 0:
+            raise StoreError('Invalid agent relay depth.')
         now=int(time.time()); mid=uuid4().hex; chain=chain_id or mid
         with self.db() as db:
             row=db.execute("SELECT status FROM projects WHERE id=?",(project_id,)).fetchone()
@@ -228,18 +282,18 @@ class Store:
                 raise StoreError("Unknown project ID.")
             if row["status"] in {"approved","deleting"}:
                 raise StoreError("This project cannot accept new work.")
-            count=db.execute("SELECT COUNT(*) FROM messages WHERE project_id=?",(project_id,)).fetchone()[0]
-            if count>=MAX_MESSAGES_PER_PROJECT:
-                raise StoreError("Project reached its message budget; request a new revision.")
             if parent_id:
                 parent=db.execute("SELECT * FROM messages WHERE id=? AND project_id=?",(parent_id,project_id)).fetchone()
                 if not parent or parent["recipient"]!=sender or parent["chain_id"]!=chain or depth!=parent["depth"]+1:
                     raise StoreError("Invalid agent-to-agent relay ancestry.")
-                # Stop repeated identical peer-to-peer traffic within one relay chain.
-                duplicate=db.execute("SELECT 1 FROM messages WHERE chain_id=? AND sender=? AND recipient=? AND body=? LIMIT 1",
-                                     (chain,sender,recipient,body.strip())).fetchone()
-                if duplicate:
-                    raise StoreError("Duplicate agent relay suppressed.")
+                # Fail closed on repeated assignments in the SAME ancestry chain.
+                # Normalized matching also catches capitalization/whitespace-only repeats.
+                # New independent human requests may legitimately revisit a topic.
+                normalized=' '.join(body.split()).casefold()
+                previous=db.execute("SELECT body FROM messages WHERE chain_id=? AND sender=? AND recipient=?",
+                                    (chain,sender,recipient))
+                if any(' '.join(r['body'].split()).casefold()==normalized for r in previous):
+                    raise StoreError('Duplicate agent relay suppressed.')
             elif sender!="human":
                 raise StoreError("Agents must route messages from a recorded parent task.")
             handoff_id=None
@@ -271,9 +325,15 @@ class Store:
         return {'project':project,'counts':counts,'messages':all_messages,'llm_usage':self.llm_usage(pid)}
 
     def messages(self,pid,limit=200):
+        """Return most RECENT messages in chronological order for long-running projects."""
         self.project(pid)
+        if isinstance(limit,bool) or not isinstance(limit,int) or limit<1:
+            raise StoreError('Message history limit must be a positive integer.')
         with self.db() as db:
-            return [dict(r) for r in db.execute("SELECT * FROM messages WHERE project_id=? ORDER BY created_at ASC,rowid ASC LIMIT ?",(pid,limit))]
+            newest=[dict(r) for r in db.execute(
+                'SELECT * FROM messages WHERE project_id=? ORDER BY created_at DESC,rowid DESC LIMIT ?',
+                (pid,limit))]
+        return list(reversed(newest))
 
     def events(self,pid,limit=200):
         self.project(pid)
@@ -286,6 +346,10 @@ class Store:
             db.execute("BEGIN IMMEDIATE")
             row=db.execute("""SELECT m.* FROM messages m JOIN projects p ON p.id=m.project_id
                               WHERE m.status='queued' AND m.next_attempt_at<=? AND p.status IN ('in_progress','awaiting_human')
+                              AND (m.workflow_stage!='pm_kickoff' OR NOT EXISTS (
+                                  SELECT 1 FROM messages ba WHERE ba.project_id=m.project_id
+                                  AND ba.workflow_stage='mandatory_business_analysis'
+                                  AND ba.status IN ('queued','processing')))
                               ORDER BY m.created_at,m.rowid LIMIT 1""",(now,)).fetchone()
             if not row: return None
             if row['sender']!='human':

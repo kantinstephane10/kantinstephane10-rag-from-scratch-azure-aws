@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 from engine import Engine
 from server import make_server
-from store import MAX_DEPTH, Store, StoreError
+from store import Store, StoreError
 
 
 class DelegatingFakeClient:
@@ -37,7 +37,6 @@ class RelayRecoveryTests(unittest.TestCase):
 
     def chain_at_depth(self, depth):
         """Create valid, verified handoffs right up to the requested queued task."""
-        self.assertLessEqual(depth, MAX_DEPTH)
         parent = None
         sender = 'human'
         recipient = 'product-manager'
@@ -56,7 +55,6 @@ class RelayRecoveryTests(unittest.TestCase):
             recipient = 'dev-1' if recipient == 'product-manager' else 'product-manager'
 
     def test_four_hops_no_longer_is_a_hard_failure(self):
-        self.assertGreater(MAX_DEPTH, 4)
         task = self.chain_at_depth(4)
         engine = Engine(self.store, client=DelegatingFakeClient(), demo=True)
         self.assertTrue(engine.process_once())
@@ -67,18 +65,15 @@ class RelayRecoveryTests(unittest.TestCase):
         self.assertEqual(len(later), 1, 'The next specialist should be scheduled')
         self.assertIsNotNone(later[0]['handoff_id'])
 
-    def test_reaching_final_relay_hop_preserves_paid_answer(self):
-        final_task = self.chain_at_depth(MAX_DEPTH)
-        before = len(self.store.messages(self.pid))
-        engine = Engine(self.store, client=DelegatingFakeClient(), demo=True)
+    def test_long_delegation_chain_is_supported(self):
+        final_task=self.chain_at_depth(12)
+        engine=Engine(self.store,client=DelegatingFakeClient(),demo=True)
         self.assertTrue(engine.process_once())
-        result = self.store.message(final_task['id'])
-        self.assertEqual(result['status'], 'done')
-        self.assertIn('completed review', result['reply'])
-        self.assertIn('Further delegation stopped', result['reply'])
-        self.assertEqual(len(self.store.messages(self.pid)), before)
-        events = self.store.events(self.pid, limit=100)
-        self.assertTrue(any(e['kind'] == 'agent_delegation_suppressed' for e in events))
+        result=self.store.message(final_task['id'])
+        self.assertEqual(result['status'],'done')
+        later=[m for m in self.store.messages(self.pid) if m['depth']==13]
+        self.assertEqual(len(later),1)
+        self.assertEqual(later[0]['status'],'queued')
 
     def test_invalid_followups_do_not_discard_answer(self):
         task = self.store.send(self.pid, 'human', 'product-manager', 'Make a plan')
@@ -98,7 +93,7 @@ class RelayRecoveryTests(unittest.TestCase):
         self.assertEqual(completed['status'], 'done')
         self.assertIn('The plan is ready', completed['reply'])
         self.assertIn('Workflow notice', completed['reply'])
-        self.assertEqual(len(self.store.messages(self.pid)), 1)
+        self.assertEqual(len(self.store.messages(self.pid)), 2)
 
     def test_existing_legacy_failure_auto_requeues_once(self):
         task = self.store.send(self.pid, 'human', 'product-manager', 'Continue planning')
