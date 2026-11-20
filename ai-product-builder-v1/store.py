@@ -234,6 +234,8 @@ class Store:
                 for mid in mids:
                     db.execute("UPDATE meetings SET status='cancelled',floor='human',epoch=epoch+1,ended_at=? WHERE id=? AND status IN ('live','scheduled')",(now,mid))
                     db.execute("UPDATE meeting_turns SET status='cancelled' WHERE meeting_id=? AND status IN ('queued','processing')",(mid,))
+                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='rag_v2_jobs'").fetchone():
+                    db.execute("UPDATE rag_v2_jobs SET cancel_requested=1,status='cancelled' WHERE project_id=? AND status IN ('queued','running')",(pid,))
                 self._event(db,pid,'project_deleting','human',{'name':row['name']})
         # Only this project ID under the application's own data directory.
         artifact_parent=(Path(self.filename).parent/'artifacts').resolve()
@@ -256,6 +258,14 @@ class Store:
                 db.execute('DELETE FROM meeting_messages WHERE meeting_id=?',(mid,))
                 db.execute('DELETE FROM meeting_turns WHERE meeting_id=?',(mid,))
             db.execute('DELETE FROM meetings WHERE project_id=?',(pid,))
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='rag_v2_jobs'").fetchone():
+                generations=[r[0] for r in db.execute('SELECT generation FROM rag_v2_jobs WHERE project_id=?',(pid,))]
+                for gen in generations:
+                    db.execute('DELETE FROM rag_v2_sections WHERE generation=?',(gen,))
+                    db.execute('DELETE FROM rag_v2_pages WHERE generation=?',(gen,))
+                db.execute('DELETE FROM rag_v2_chunks WHERE project_id=?',(pid,))
+                db.execute('DELETE FROM rag_v2_indexes WHERE project_id=?',(pid,))
+                db.execute('DELETE FROM rag_v2_jobs WHERE project_id=?',(pid,))
             for table in ('rag_chunks','rag_indexes','rag_jobs','handoffs','artifacts','events','messages','project_intake'):
                 if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():
                     db.execute(f'DELETE FROM {table} WHERE project_id=?',(pid,))

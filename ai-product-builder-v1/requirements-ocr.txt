@@ -1,0 +1,5 @@
+# Optional offline document/image OCR. No OpenAI vision calls required.
+rapidocr>=3.0,<5
+onnxruntime>=1.17,<2
+Pillow>=10,<13
+# Optional alternative: pytesseract and install the Tesseract executable on Windows.

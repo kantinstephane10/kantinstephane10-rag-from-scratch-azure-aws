@@ -234,12 +234,14 @@ async function refreshRagStatus(){
  if(state.projectSelected!==pid)return;
  const job=data.job;
  const busy=['queued','running'].includes(job?.status);
- const indexText=data.indexed?`Indexed ${data.chunk_count} passages from ${data.receipt?.documents?.length||0} documents.`:'No index has been built.';
+ const indexText=data.indexed?`Indexed ${data.chunk_count} passages from ${data.receipt?.documents?.length||0} documents · ${data.embedding_model} (local).`:'No index has been built.';
  const jobText=job?`Last index job: ${job.status}${job.error?' — '+job.error:''}.`:'';
- $('rag-state').textContent=indexText+(data.stale?' Index is stale—rebuild before asking.':'')+' '+jobText;
+ $('rag-state').textContent=indexText+(data.stale?' Index is stale—rebuild before asking.':'')+' '+jobText+(job?` · ${job.progress_pct||0}% of input processed, ${job.chunks_done||0} chunks`:'');
  const verified=(data.receipt?.ingestion_checks?.document_checksums==='verified');
- $('rag-details').textContent=verified?'Ingestion integrity verified. Answer accuracy, user access control, and release approval remain untested.':'Readable PDF/TXT/MD/CSV content and OpenAI embeddings are required. Scanned PDFs need OCR (not available).';
- $('rag-build').disabled=busy||state.demo;
+ $('rag-details').textContent=verified?'File integrity verified with local embeddings. Answer accuracy and release approval remain untested.':'Local Hugging Face embeddings. Optional local RapidOCR/Tesseract for scanned pages; first model use downloads weights.';
+ $('rag-build').disabled=busy;
+ $('rag-resume').disabled=busy||!['failed','interrupted'].includes(job?.status);
+ $('rag-cancel').disabled=!busy;
  $('rag-ask').disabled=!data.indexed||data.stale||busy||state.demo;
  $('rag-upload').disabled=busy;
 }
@@ -276,10 +278,10 @@ async function uploadRagDocuments(){
   alertMessage(`${files.length} documents uploaded. Rebuild the index to include them.`);
  }catch(err){alertMessage(err.message)}finally{$('rag-upload').disabled=false;$('rag-upload-progress').textContent=''}
 }
-async function buildRagIndex(){
+async function buildRagIndex(resume=false){
  const pid=state.projectSelected;if(!pid)return;
  $('rag-build').disabled=true;
- try{const result=await post(`/api/projects/${pid}/rag/index`,{});
+ try{const result=await post(`/api/projects/${pid}/rag/index`,{resume});
   $('rag-state').textContent=`Indexing requested (${result.job_id}). Document extraction and embeddings are running.`;
   await refreshRagStatus();
  }catch(err){alertMessage(err.message);await refreshRagStatus()}
@@ -441,7 +443,9 @@ function bind(){
  $('refresh-rooms').addEventListener('click',async()=>{try{await refreshMeetings();await refreshRoom()}catch(e){alertMessage(e.message)}});
  $('refresh-projects').addEventListener('click',()=>refreshProjects().catch(e=>alertMessage(e.message)));
  $('rag-refresh').addEventListener('click',()=>refreshRagStatus().catch(e=>alertMessage(e.message)));
- $('rag-build').addEventListener('click',buildRagIndex);
+ $('rag-build').addEventListener('click',()=>buildRagIndex(false));
+ $('rag-resume').addEventListener('click',()=>buildRagIndex(true));
+ $('rag-cancel').addEventListener('click',async()=>{if(!state.projectSelected)return;try{await post(`/api/projects/${state.projectSelected}/rag/cancel`,{});await refreshRagStatus();}catch(e){alertMessage(e.message)}});
  $('rag-upload').addEventListener('click',uploadRagDocuments);
  $('rag-question-form').addEventListener('submit',askRag);
  $('delete-confirm-name').addEventListener('input',()=>{$('delete-project-confirm').disabled=!projectToDelete||$('delete-confirm-name').value!==projectToDelete.name});
@@ -532,6 +536,8 @@ async function refreshSettings(){
  $('settings-mode').value=cfg.mode||'demo';
  for(const group of MODEL_GROUPS){$('route-'+group).value=cfg.models?.[group]||'';}
  $('route-meeting').value=cfg.meeting_model||'';
+ $('hf-embedding-model').value=cfg.embedding_model||'sentence-transformers/all-MiniLM-L6-v2';
+ $('hf-ocr-mode').value=cfg.ocr_mode||'auto';
  $('key-status').textContent=cfg.api_key_configured?'OpenAI key configured — stored '+cfg.key_storage+'.':'No API key configured. Demo mode only.';
  buildRoleGrid();renderModelRouting(cfg);
 }
@@ -539,12 +545,13 @@ function settingsPayload(){
  const role_models={};
  document.querySelectorAll('#agent-model-grid input[data-role]').forEach(input=>{if(input.value.trim())role_models[input.dataset.role]=input.value.trim()});
  const models={};for(const group of MODEL_GROUPS)models[group]=modelValue('route-'+group);
- return {models,role_models,meeting_model:modelValue('route-meeting'),mode:$('settings-mode').value};
+ return {models,role_models,meeting_model:modelValue('route-meeting'),mode:$('settings-mode').value,
+  embedding_model:$('hf-embedding-model').value,ocr_mode:$('hf-ocr-mode').value};
 }
 async function saveSettings(){
  try{const cfg=await post('/api/settings',settingsPayload());currentConfig=cfg;renderModelRouting(cfg);
   state.demo=cfg.mode==='demo';$('demo-label').textContent=state.demo?'OFFLINE DEMO — no GPT calls.':'LIVE OPENAI — API charges may apply.';
-  alertMessage('Model routing and run mode saved. GPT usage is tracked without local token caps.');
+  alertMessage('Model routing, Hugging Face embeddings, OCR and run mode saved. Changing embedding models requires rebuilding project indexes.');
  }catch(e){alertMessage(e.message)}
 }
 function bindSettings(){

@@ -1,3 +1,6 @@
-# Install using the same Python executable that runs server.py
+# Install with the same interpreter as server.py (use a separate venv, especially on Windows).
 PyMuPDF>=1.25,<2
+sentence-transformers>=3.0,<7
 langchain-text-splitters>=1.0,<3
+Pillow>=10,<13
+# Optional: pip install -r requirements-ocr.txt for local scanned-document OCR.

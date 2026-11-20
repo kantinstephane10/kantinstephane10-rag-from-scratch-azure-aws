@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 from config import MODELS, ARCHITECT, BUSINESS, ROUTINE
 from roles import ROLES
+from hf_embeddings import DEFAULT_MODEL, validate_model
 from store import StoreError
 
 MODEL_ID = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,120}$')
@@ -69,6 +70,8 @@ class RuntimeSettings:
             'models': dict(MODELS),
             'role_models': {},
             'meeting_model': '',
+            'embedding_model': DEFAULT_MODEL,
+            'ocr_mode': 'auto',
         }
         if self.path.exists():
             try:
@@ -115,6 +118,12 @@ class RuntimeSettings:
             if any(not isinstance(m, str) or (m.strip() and not MODEL_ID.fullmatch(m.strip())) for m in roles.values()):
                 raise StoreError('Invalid role-specific model ID.')
             data['role_models'] = {r: m.strip() for r, m in roles.items() if m.strip()}
+        if 'embedding_model' in supplied:
+            data['embedding_model'] = validate_model(supplied['embedding_model'])
+        if 'ocr_mode' in supplied:
+            if supplied['ocr_mode'] not in ('off','auto','rapidocr','tesseract','vision','force-vision'):
+                raise StoreError('Choose an available OCR mode.')
+            data['ocr_mode'] = supplied['ocr_mode']
         if 'meeting_model' in supplied:
             value = supplied['meeting_model']
             if not isinstance(value, str) or (value.strip() and not MODEL_ID.fullmatch(value.strip())):

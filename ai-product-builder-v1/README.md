@@ -113,3 +113,13 @@ Every **newly kicked-off project** schedules Business Analyst 1 and Business Ana
 ## V1.3.3 update — large files and per-agent file reading
 
 See [RELEASE_NOTES_V1.3.3.md](RELEASE_NOTES_V1.3.3.md). Highlights: 1 GiB streamed uploads, project/meeting file attachments, real PDF/TXT source access for all 49 registered agents, short kickoff assignments for long project briefs, and **Start agents** for an existing draft. All files remain project/meeting-scoped. A 1 GiB upload does not imply full 1 GiB semantic indexing; the existing index limits still apply.
+
+
+## V1.4.1 — local free Hugging Face embeddings
+
+- Uses local `sentence-transformers/all-MiniLM-L6-v2` by default (384-dimensional embedding vectors). Optionally select `BAAI/bge-small-en-v1.5` from **OpenAI & model settings**. Both are free to run locally and the first use downloads model weights from Hugging Face. Model downloads, CPU/RAM and disk usage still apply.
+- Incremental indexing in **Projects → Document RAG execution** uses the V2 disk-backed SQLite + FTS5 index, including optional RapidOCR scanned-PDF processing (`pip install -r requirements-ocr.txt`). Indices are per project and saved; Resume and Cancel controls are available. Indexing does not send document embeddings to OpenAI and does not need an OpenAI API key.
+- **Answer generation** still needs a valid OpenAI API key, Live OpenAI mode, and explicit per-project consent. Hugging Face embeddings are separate from OpenAI GPT. No Ollama.
+- Configure the embedding model and OCR mode through **OpenAI & model settings**. **Rebuild the index after changing embedding models.** The selected model is persisted per-index so queries use a matching model.
+- Python installation on Windows: from `ai-product-builder-v1`, `& "$HOME\anaconda3\python.exe" -m pip install -r requirements-rag.txt`; optionally install `requirements-ocr.txt`, and run `server.py --port 8767`. Large indexing may use substantial disk and CPU.
+- `--demo` still simulates agent messages; indexing is real and local even in demo mode. **Do not report production deployment, LangGraph code generation, full 1 GiB benchmark, ACL certification, or live provider verification as passed:** none of those is proven by this release.

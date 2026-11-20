@@ -27,7 +27,9 @@ from store import Store, StoreError
 from handoffs import (save_artifact, save_artifact_stream, save_meeting_artifact_stream,
     artifacts, meeting_artifacts, list_handoffs, read_artifact_excerpt, read_meeting_artifact_excerpt,
     MAX_ARTIFACT_BYTES)
-from rag_pipeline import init_rag,rag_status,start_index_job,answer_question
+from rag_pipeline import init_rag
+from large_rag import (init_large_rag, rag_status_large, start_large_index_job, answer_large_question, cancel_large_index)
+from hf_embeddings import DEFAULT_MODEL, MODELS as HF_MODELS
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger(__name__)
@@ -39,6 +41,7 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
     if not is_loopback and not access_token:
         raise ValueError('Non-loopback binding requires BUILDER_ACCESS_TOKEN and TLS reverse proxy.')
     init_rag(store)
+    init_large_rag(store)
 
     def rag_access(pid):
         project=store.project(pid)
@@ -52,14 +55,19 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
         return project
 
     def auto_index(pid):
-        # The project UI uploads files before requesting kickoff. Index is a real
-        # background job and never runs in synthetic/offline demo mode.
+        # Local Hugging Face embeddings: no paid embedding API and no OpenAI key required.
         project=store.project(pid)
-        if project['intake']['product_type']!='rag' or engine.demo or runtime is None or not runtime.key:return
-        if not project['intake']['provider_consent']:return
-        if not any(Path(a['name']).suffix.lower() in {'.pdf','.md','.txt','.csv'} for a in artifacts(store,pid)):return
-        try:start_index_job(store,pid,runtime.key)
-        except StoreError:LOG.exception('Automatic RAG index scheduling failed for %s',pid)
+        if project['intake']['product_type']!='rag' or engine.demo:return
+        if not any(Path(a['name']).suffix.lower() in {'.pdf','.md','.txt','.csv','.png','.jpg','.jpeg','.webp'}
+                   for a in artifacts(store,pid)):return
+        try:
+            start_large_index_job(store,pid,runtime.key if runtime else None,
+                embedding_model=runtime.data['embedding_model'] if runtime else DEFAULT_MODEL,
+                ocr_mode=runtime.data['ocr_mode'] if runtime else 'auto',
+                ocr_model=runtime.model_for('rag-engineer') if runtime else None)
+        except StoreError:
+            LOG.exception('Automatic local RAG index scheduling failed for %s',pid)
+
 
     class Handler(BaseHTTPRequestHandler):
         server_version='AIProductBuilder/0.4'
@@ -189,7 +197,7 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                     self._json(200,{'models':runtime.available_models()})
                 elif path=='/api/projects': self._json(200,{'projects':store.projects()})
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/rag/status',path):
-                    self._json(200,rag_status(store,path.split('/')[3]))
+                    self._json(200,rag_status_large(store,path.split('/')[3]))
                 elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/artifacts/[a-f0-9]{32}/text',path):
                     if not is_loopback: raise StoreError('File text access requires the local UI.')
                     parts=path.split('/');pid,aid=parts[3],parts[5]
@@ -258,12 +266,22 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                     self._json(201,project)
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/rag/index',path):
                     pid=path.split('/')[3]
-                    rag_access(pid)
-                    self._json(202,start_index_job(store,pid,runtime.key))
+                    if not is_loopback:raise StoreError('Local indexing requires localhost access.')
+                    self._json(202,start_large_index_job(store,pid,runtime.key if runtime else None,
+                        embedding_model=runtime.data['embedding_model'] if runtime else DEFAULT_MODEL,
+                        ocr_mode=runtime.data['ocr_mode'] if runtime else 'auto',
+                        ocr_model=runtime.model_for('rag-engineer') if runtime else None,
+                        resume=bool(data.get('resume',False))))
+                elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/rag/cancel',path):
+                    if not is_loopback:raise StoreError('Local indexing requires localhost access.')
+                    self._json(200,cancel_large_index(store,path.split('/')[3]))
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/rag/ask',path):
                     pid=path.split('/')[3]
                     rag_access(pid)
-                    self._json(200,answer_question(store,pid,data.get('question'),runtime.key,
+                    idx=rag_status_large(store,pid)
+                    if idx.get('indexed') and idx['embedding_model']!=runtime.data['embedding_model']:
+                        raise StoreError('Local embedding model changed; rebuild the index before asking.')
+                    self._json(200,answer_large_question(store,pid,data.get('question'),runtime.key,
                                       runtime.model_for('rag-engineer')))
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/delete',path):
                     pid=path.split('/')[3]
