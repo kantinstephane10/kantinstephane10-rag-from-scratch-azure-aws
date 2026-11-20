@@ -6,3 +6,7 @@ data/
 *.db
 *.sqlite*
 .env
+
+data/runtime-settings.json
+data/openai-key.dpapi
+data/*.tmp

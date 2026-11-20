@@ -18,6 +18,7 @@ from urllib.parse import urlparse, parse_qs
 
 from architecture import blueprint
 from config import settings
+from runtime_settings import RuntimeSettings
 from engine import Engine
 from meetings import (create_meeting, meeting, list_meetings, start_meeting,
                       take_floor, yield_floor, end_meeting, cancel_meeting)
@@ -30,7 +31,7 @@ LOG = logging.getLogger(__name__)
 MAX_POST = 1_400_000  # 1 MB artifact after base64 transport
 
 
-def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None):
+def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtime=None):
     is_loopback = host in ('127.0.0.1','localhost','::1')
     if not is_loopback and not access_token:
         raise ValueError('Non-loopback binding requires BUILDER_ACCESS_TOKEN and TLS reverse proxy.')
@@ -107,7 +108,12 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None):
                     self._json(200,{'status':'ok','llm':'OpenAI GPT','offline_demo':engine.demo,
                                     'api_key_configured':bool(engine.client.key) if hasattr(engine.client,'key') else False})
                 elif path=='/api/architecture': self._json(200,blueprint())
-                elif path=='/api/settings': self._json(200,settings())
+                elif path=='/api/settings':
+                    self._json(200,runtime.snapshot() if runtime else settings())
+                elif path=='/api/providers/openai/models':
+                    if not is_loopback: raise StoreError('OpenAI configuration requires local access.')
+                    if runtime is None: raise StoreError('Runtime settings not configured.')
+                    self._json(200,{'models':runtime.available_models()})
                 elif path=='/api/projects': self._json(200,{'projects':store.projects()})
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/artifacts',path):
                     pid=path.split('/')[3]
@@ -120,6 +126,9 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None):
                     self._json(200,{'meetings':list_meetings(store,params.get('project_id',[None])[0])})
                 elif re.fullmatch(r'/api/meetings/[a-zA-Z0-9]+',path):
                     self._json(200,meeting(store,path.rsplit('/',1)[-1]))
+                elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/usage',path):
+                    pid=path.split('/')[3];store.project(pid)
+                    self._json(200,store.llm_usage(pid))
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/activity',path):
                     pid=path.split('/')[3]
                     self._json(200,store.activity(pid))
@@ -143,7 +152,16 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None):
             path=urlparse(self.path).path
             try:
                 data=self._body()
-                if path=='/api/projects':
+                if path=='/api/settings':
+                    if runtime is None or not is_loopback: raise StoreError('Settings can only be changed on localhost.')
+                    response=runtime.update(data);engine.apply_runtime();self._json(200,response)
+                elif path=='/api/settings/key':
+                    if runtime is None or not is_loopback: raise StoreError('Key updates require localhost.')
+                    response=runtime.save_key(data.get('api_key'));engine.apply_runtime();self._json(200,response)
+                elif path=='/api/settings/key/clear':
+                    if runtime is None or not is_loopback: raise StoreError('Key removal requires localhost.')
+                    response=runtime.clear_key();engine.apply_runtime();self._json(200,response)
+                elif path=='/api/projects':
                     if data.get('kickoff',False) and not engine.demo and data.get('intake',{}).get('provider_consent') is not True:
                         raise StoreError('Confirm provider consent before starting GPT workers.')
                     project=store.create_project(data.get('name',''),data.get('brief',''),intake=data.get('intake'))
@@ -200,11 +218,15 @@ def main(argv=None):
     parser.add_argument('--db',default=os.getenv('BUILDER_DB',str(ROOT/'data'/'builder.sqlite3')))
     args=parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(message)s')
-    store=Store(args.db); engine=Engine(store,demo=args.demo)
-    server=make_server(store,engine,args.host,args.port,os.getenv('BUILDER_ACCESS_TOKEN'))
+    store=Store(args.db)
+    runtime=RuntimeSettings(Path(args.db).parent)
+    if args.demo and runtime.data['mode'] != 'demo':
+        runtime.update({'mode':'demo'})
+    engine=Engine(store,demo=True,runtime=runtime)
+    server=make_server(store,engine,args.host,args.port,os.getenv('BUILDER_ACCESS_TOKEN'),runtime)
     engine.start()
     print(f'AI Product Builder: http://{args.host}:{server.server_address[1]}/  | '
-          f'{"OFFLINE DEMO (not GPT)" if args.demo else "OPENAI GPT"}',flush=True)
+          f'{"OFFLINE DEMO (not GPT)" if engine.demo else "OPENAI GPT"}',flush=True)
     try: server.serve_forever(poll_interval=0.25)
     except KeyboardInterrupt: pass
     finally:

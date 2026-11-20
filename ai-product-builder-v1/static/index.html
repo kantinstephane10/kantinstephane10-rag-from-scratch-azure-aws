@@ -6,8 +6,9 @@
   <link rel="stylesheet" href="/app.css">
   <script defer src="/app.js"></script>
 </head>
-<body>
+<body class="architecture-mode">
 <div class="shell">
+  <button id="navigation-backdrop" class="navigation-backdrop" type="button" aria-label="Close workspace navigation" hidden></button>
   <aside class="sidebar">
     <div class="brand"><span class="brand-logo">✦</span><span><b>AI Product Builder</b><small>AGENTIC WORKSPACE</small></span></div>
     <div class="sidetitle">WORKSPACE</div>
@@ -16,6 +17,7 @@
       <button class="nav active" data-view="architecture">▦ <span>Architecture</span></button>
       <button class="nav" data-view="projects">◫ <span>Projects</span></button>
       <button class="nav" data-view="handoffs">↗ <span>Handoffs &amp; artifacts</span></button>
+      <button class="nav" data-view="settings">⚙ <span>OpenAI &amp; model settings</span></button>
     </nav>
     <div class="sidetitle">CONTROLS</div>
     <div class="side-note"><span class="online-dot"></span><span><b>GPT model router</b><small>49 agent roles • 9 layers</small></span></div>
@@ -50,18 +52,65 @@
         </div>
       </div>
     </section>
-    <section id="view-architecture" class="view">
-      <div class="arch-hero">
-        <div><div class="hero-kicker">✦ END-TO-END MULTI-AGENT ORGANIZATION</div><h1>AI Agent / Agentic AI / RAG Product Builder</h1><p>Design, build, review, secure and deliver AI products with your own GPT-powered engineering organization.</p><div class="hero-buttons"><button id="hero-project" class="hero-primary">+ Create a project</button><button id="hero-meetings" class="hero-secondary">◉ Watch agent meetings</button></div></div>
-        <div class="hero-stats"><div><strong>49</strong><span>AI specialist roles</span></div><div><strong>09</strong><span>Organization layers</span></div><div><strong>01</strong><span>Human release gate</span></div></div>
+    <section id="view-architecture" class="view workflow-view">
+      <div class="workflow-header">
+        <button class="workflow-menu" id="workflow-menu" type="button" aria-label="Open workspace navigation" title="Open workspace navigation">
+          <svg class="workflow-pulse" viewBox="0 0 32 32" aria-hidden="true"><path d="M2 18h6l4-11 7 20 5-12 6 0"/></svg>
+        </button>
+        <div class="workflow-heading"><h1>Project workflow</h1><p id="workflow-subtitle">Select a project to view agent progress</p></div>
+        <div class="workflow-counter"><span id="workflow-badge" class="workflow-badge">READY</span><small id="workflow-tally">0 of 0 tasks recorded</small></div>
       </div>
-      <div class="architecture-workspace">
-        <aside class="architecture-column"><div class="architecture-sidecard"><h3>↧ Inputs</h3><div class="sidecard-body"><div><b>◎ Business need</b><small>Use case and success criteria</small></div><div><b>♧ AI product request</b><small>Agent / Agentic / RAG</small></div><div><b>▤ Requirements</b><small>Scope, constraints, acceptance</small></div><div><b>▣ Data sources</b><small>Files, datasets and APIs</small></div><div><b>◇ Policies</b><small>Security, privacy and governance</small></div></div></div></aside>
-        <div class="architecture-center"><div class="arch-strip"><b>Execution architecture</b><span>○ Queued &nbsp; ◉ Working &nbsp; ● Complete</span></div><div id="architecture-layers" class="layers"></div><div class="human-gate">🔒 Human approval is mandatory before protected changes or releases. AI approval is advisory.</div></div>
-        <aside class="architecture-column"><div class="architecture-sidecard"><h3>⬡ AI Products (Outputs)</h3><div class="sidecard-body"><div><b>AI Agent</b><small>Task-specific assistants</small></div><div><b>Agentic AI System</b><small>Multi-agent workflows and tools</small></div><div><b>RAG Product</b><small>Grounded enterprise knowledge</small></div><div><b>Source code &amp; artifacts</b><small>Code, prompts and configuration</small></div><div><b>Documentation</b><small>Design, testing and operation</small></div></div></div><div class="architecture-sidecard"><h3>▤ Success metrics</h3><div class="sidecard-body compact"><div>✓ Requirements coverage</div><div>✓ Code and test evidence</div><div>✓ Retrieval / agent evaluations</div><div>✓ Security and compliance</div><div>✓ Cost, latency and stability</div></div></div><div class="architecture-sidecard"><h3>⟳ Feedback loop</h3><div class="sidecard-body compact"><div>↺ Review → developer</div><div>↺ Testing → rework</div><div>↺ Operations → product backlog</div></div></div></aside>
+      <section class="routing-panel" aria-label="GPT model routing">
+        <div class="routing-caption"><div><h2>Model routing</h2><p>GPT Standard selects a model for each assignment.</p></div>
+          <div class="routing-commands"><select id="workflow-project-picker" aria-label="Choose active project"><option value="">No project selected</option></select><button id="route-configure" class="routing-link" type="button">Configure OpenAI</button></div>
+        </div>
+        <div class="routing-cards">
+          <div class="model-card model-architecture"><b id="model-architecture">GPT architecture model</b><small>Architecture and Senior Troubleshooter</small></div>
+          <div class="model-card model-engineering"><b id="model-engineering">GPT engineering model</b><small>Orchestration, engineering, estimates, and reviews</small></div>
+          <div class="model-card model-business"><b id="model-business">GPT business model</b><small>Business analysis, data, and prompt design</small></div>
+          <div class="model-card model-routine"><b id="model-routine">GPT routine model</b><small>Direct replies, translations, and meeting contributions</small></div>
+        </div>
+      </section>
+      <div class="workflow-grid">
+        <aside class="workflow-inputs workflow-aside"><div class="workflow-sidecard"><h2><svg class="panel-heading-icon"><use href="/icons.svg#inbox"></use></svg> Inputs</h2>
+          <div class="side-feature"><svg><use href="/icons.svg#target"></use></svg><span><b>Business need</b><small>Use case and success criteria</small></span></div>
+          <div class="side-feature"><svg><use href="/icons.svg#bot"></use></svg><span><b>Product request</b><small>Agent, workflow, or RAG</small></span></div>
+          <div class="side-feature"><svg><use href="/icons.svg#file-text"></use></svg><span><b>Requirements</b><small>Scope and constraints</small></span></div>
+          <div class="side-feature"><svg><use href="/icons.svg#database"></use></svg><span><b>Data sources</b><small>Documents, datasets, APIs</small></span></div>
+          <div class="side-feature"><svg><use href="/icons.svg#shield-check"></use></svg><span><b>Policies</b><small>Security and privacy</small></span></div>
+        </div></aside>
+        <div class="workflow-center">
+          <div class="workflow-center-top"><h2>Execution architecture</h2><div class="workflow-legend"><span><i class="state-dot queued"></i>Queued</span><span><i class="state-dot processing"></i>Working</span><span><i class="state-dot done"></i>Complete</span></div></div>
+          <div id="architecture-layers" class="workflow-layers" aria-label="Nine-layer specialist workflow"></div>
+        </div>
+        <aside class="workflow-outputs workflow-aside">
+          <div class="workflow-sidecard"><h2><svg class="panel-heading-icon"><use href="/icons.svg#box"></use></svg>Product outputs</h2>
+            <div class="side-feature"><svg><use href="/icons.svg#bot"></use></svg><span><b>AI agent</b><small>Task-specific assistant</small></span></div>
+            <div class="side-feature"><svg><use href="/icons.svg#workflow"></use></svg><span><b>Agentic workflow</b><small>Coordinated roles and tools</small></span></div>
+            <div class="side-feature"><svg><use href="/icons.svg#database"></use></svg><span><b>RAG system</b><small>Grounded document answers</small></span></div>
+            <div class="side-feature"><svg><use href="/icons.svg#code-xml"></use></svg><span><b>Source &amp; artifacts</b><small>Code, prompts, configuration</small></span></div>
+            <div class="side-feature"><svg><use href="/icons.svg#file-text"></use></svg><span><b>Documentation</b><small>Architecture and operating guides</small></span></div>
+            <div class="side-feature"><svg><use href="/icons.svg#package"></use></svg><span><b>Deployment package</b><small>Release and rollout plan</small></span></div>
+          </div>
+          <div class="workflow-sidecard"><h2><svg class="panel-heading-icon"><use href="/icons.svg#chart-no-axes-combined"></use></svg>Success metrics</h2>
+            <div class="side-feature compact"><svg><use href="/icons.svg#circle-check"></use></svg><span><b>Requirements coverage</b></span></div>
+            <div class="side-feature compact"><svg><use href="/icons.svg#circle-check"></use></svg><span><b>Code quality &amp; tests</b></span></div>
+            <div class="side-feature compact"><svg><use href="/icons.svg#circle-check"></use></svg><span><b>Groundedness &amp; task success</b></span></div>
+            <div class="side-feature compact"><svg><use href="/icons.svg#circle-check"></use></svg><span><b>Security &amp; compliance</b></span></div>
+            <div class="side-feature compact"><svg><use href="/icons.svg#circle-check"></use></svg><span><b>Latency, cost &amp; uptime</b></span></div>
+          </div>
+          <div class="workflow-sidecard"><h2><svg class="panel-heading-icon"><use href="/icons.svg#refresh-cw"></use></svg>Feedback loop</h2>
+            <div class="side-feature compact"><svg><use href="/icons.svg#refresh-cw"></use></svg><span><b>Test results guide rework</b></span></div>
+            <div class="side-feature compact"><svg><use href="/icons.svg#shield-check"></use></svg><span><b>Findings guide remediation</b></span></div>
+            <div class="side-feature compact"><svg><use href="/icons.svg#activity"></use></svg><span><b>Production signals guide priorities</b></span></div>
+          </div>
+        </aside>
       </div>
-      <div class="infra-title">▰ Shared platform &amp; infrastructure <span>Accessible to all authorized agents</span></div>
-      <div class="infra-list"><span>GPT model gateway</span><span>LangChain</span><span>LangGraph</span><span>LangSmith (optional)</span><span>RAG knowledge store</span><span>Shared SQLite memory</span><span>Verified handoffs</span><span>Git &amp; source control</span><span>Tool registry (planned)</span><span>Execution sandbox (planned)</span><span>Security policy</span><span>Audit &amp; observability</span></div>
+      <div class="workflow-infrastructure">
+        <h2><svg><use href="/icons.svg#server"></use></svg> Shared infrastructure <small>Authorized agents use common project context</small></h2>
+        <div><span>OpenAI GPT gateway</span><span>LangChain</span><span>LangGraph</span><span>LangSmith (optional)</span><span>Document / vector stores</span><span>SQLite project memory</span><span>Verified handoffs</span><span>Source control</span><span>Security &amp; policy</span><span>Testing tools (planned)</span><span>Deployment (planned)</span></div>
+        <p>Actual statuses reflect recorded agent tasks. Planning replies are not proof of generated files, executed tests, or deployed releases.</p>
+      </div>
     </section>
     <section id="view-projects" class="view" hidden><div class="page-heading"><div><div class="eyebrow">PRODUCT PIPELINE</div><h1>AI product projects</h1><p>Give the Product Manager a scoped Agentic AI, AI Agent or RAG product brief.</p></div></div><div class="project-grid"><div class="panel form-panel"><h3>Create project</h3><form id="project-form">
 <label for="project-type">AI product type</label><select id="project-type"><option value="rag">RAG assistant</option><option value="agent">AI agent</option><option value="agentic">Agentic AI system</option></select>
@@ -73,12 +122,41 @@
 <div class="estimate-summary" id="estimate-preview">Estimated one-time budget: $0.00 · Monthly: $0.00</div></details>
 <label for="model-profile">GPT model routing</label><select id="model-profile"><option value="standard">Standard · automatic role routing</option><option value="deep-review">Deep review · GPT_MODEL_DEEP_REVIEW override</option><option value="cost-aware">Cost-aware · GPT_MODEL_COST_AWARE override</option></select>
 <label class="checkline"><input id="provider-consent" type="checkbox"> Allow OpenAI to process this project's brief and agent discussions.</label>
+<details class="intake-details" id="project-provider-panel"><summary>Provider API keys</summary>
+<div class="cost-grid"><label>Provider<select disabled><option>OpenAI</option></select></label><label>API key<input id="project-api-key" type="password" autocomplete="off" placeholder="Paste the provider API key"></label></div>
+<div class="settings-actions"><button type="button" id="project-save-key" class="secondary">Save API key</button><button type="button" id="project-clear-key" class="secondary">Clear key</button></div>
+<p id="project-key-status" class="muted small-muted">Windows encrypts saved keys for your account and loads them on restart. Keys are never included in project text.</p></details>
+<details class="intake-details"><summary>Project email alerts</summary><p class="muted small-muted">Automatic email delivery is not yet connected. Project status and audit records remain available in the dashboard.</p></details>
+<button type="button" id="project-provider-settings" class="secondary">⚙ Configure all GPT models &amp; token limits</button>
 <label class="checkline"><input id="project-kickoff" type="checkbox" checked> Start the Product Manager agent upon creation</label>
 <button class="primary" type="submit">Validate &amp; start project</button></form></div><div class="panel"><div class="side-panel-title"><h3>Project ledger</h3><button class="text-btn" id="refresh-projects">Refresh</button></div><div id="project-list" class="project-list"></div></div></div>
 <div class="panel live-work" id="project-live" hidden>
 <div class="side-panel-title"><h3 id="live-title">Agent work sequence</h3><div class="worker-actions"><button id="refresh-activity" class="text-btn" type="button">Refresh live</button><button id="select-all-queued" class="secondary" type="button" disabled>Select all queued</button><button id="clear-task-selection" class="secondary" type="button" disabled>Clear selection</button><button id="cancel-selected-tasks" class="danger" type="button" disabled>Cancel selected (0)</button></div></div>
-<div class="live-progress"><div id="work-progress" class="live-progress-bar"></div></div><div id="work-stats" class="muted small-muted">No work queued.</div>
+<div class="live-progress"><div id="work-progress" class="live-progress-bar"></div></div><div id="work-stats" class="muted small-muted">No work queued.</div><div id="token-usage" class="muted small-muted">No recorded GPT usage yet.</div>
 <div class="activity-grid"><div><div class="seq-header"><h3>Agent sequence</h3><span class="small-muted">Select any worker to inspect</span></div><div id="activity-sequence" class="activity-sequence"></div></div><div><h3 id="activity-role">Select a worker</h3><div class="worker-actions"><button type="button" class="secondary" id="ask-worker" disabled>◉ Ask this worker in a meeting</button><button type="button" class="secondary" id="cancel-task" disabled>✕ Cancel task</button><button type="button" class="secondary" id="open-handoffs">↗ View handoffs</button></div><div id="activity-detail" class="activity-detail">Select a task to see the assignment, agent reply, verification status and handoff evidence.</div><div class="receipt-panel"><h3>Verified handoff / evidence</h3><div id="activity-receipt" class="small-muted">No recorded handoff selected.</div></div></div></div></div></section>
+    <section id="view-settings" class="view settings-view" hidden>
+      <div class="page-heading"><div><div class="eyebrow">MODEL CONTROL PLANE</div><h1>OpenAI &amp; agent model settings</h1><p>Configure OpenAI, choose the model for each specialist, and protect your token budget from this dashboard.</p></div></div>
+      <div class="settings-columns">
+        <div class="panel settings-panel">
+          <h2>Provider API keys</h2><p class="muted">Keys remain on this localhost server and are never returned to the browser. On Windows, saved keys are encrypted with your user account (DPAPI).</p>
+          <div class="settings-row"><label>Provider<select id="api-provider"><option value="openai">OpenAI</option></select></label><label>OpenAI API key<input id="settings-api-key" type="password" autocomplete="off" placeholder="Paste OpenAI API key"></label></div>
+          <div class="settings-actions"><button class="secondary" id="save-api-key" type="button">Save API key</button><button class="secondary" id="clear-api-key" type="button">Clear key</button><button class="secondary" id="check-models" type="button">Find available models</button></div>
+          <p id="key-status" class="setting-note">No API key saved.</p>
+          <h2>Run mode</h2><div class="settings-row"><label>Execution mode<select id="settings-mode"><option value="demo">Offline demo — test interface only</option><option value="openai">Live OpenAI GPT — real paid API calls</option></select></label><div class="settings-info">Live mode changes future agent calls. A model request already running may still finish and incur usage.</div></div>
+          <h2>Token efficiency</h2><div class="settings-row settings-numbers"><label>Maximum output tokens / response<input id="limit-output" type="number" min="128" max="4000" value="900"></label><label>Maximum GPT calls / project<input id="limit-calls" type="number" min="1" max="1000" value="100"></label><label>Maximum recorded tokens / project<input id="limit-tokens" type="number" min="500" max="10000000" value="150000"></label></div>
+          <p class="setting-note">Budgets block subsequent requests when reached. An in-flight request may exceed the threshold. Token counts are taken from completed OpenAI responses; there is no fabricated cost estimate.</p>
+        </div>
+        <div class="panel settings-panel">
+          <h2>GPT model routing</h2><p class="muted">The screenshot names Astra, Sol, Terra and Luna are visual role groups. Enter a <b>real model ID available to your OpenAI API account</b> for each group.</p>
+          <div class="model-edit-grid"><label>Astra · architecture<input id="route-architecture" list="available-models" placeholder="Actual OpenAI model ID"></label><label>Sol · engineering &amp; reviews<input id="route-engineering" list="available-models"></label><label>Terra · business, data &amp; prompts<input id="route-business" list="available-models"></label><label>Luna · routine work<input id="route-routine" list="available-models"></label></div>
+          <label class="full-label">Meeting model (optional; blank uses each worker's group model)<input id="route-meeting" list="available-models" placeholder="Use agent's assigned model"></label>
+          <datalist id="available-models"></datalist>
+          <p id="model-lookup-status" class="setting-note">Use “Find available models” to load IDs provided by your OpenAI account.</p>
+          <div class="settings-actions"><button id="save-model-settings" type="button" class="primary">Save routing, budgets &amp; mode</button></div>
+        </div>
+      </div>
+      <div class="panel settings-panel role-settings"><div class="side-panel-title"><h2>Model assignment · all 49 AI workers</h2><span class="small-muted">A blank override uses its role-group model.</span></div><div id="agent-model-grid" class="agent-model-grid"></div><div class="settings-actions"><button id="save-role-settings" class="primary" type="button">Save all 49 worker assignments</button></div></div>
+    </section>
     <section class="view" id="view-handoffs" hidden><div class="page-heading"><div><div class="eyebrow">SHARED WORK PRODUCTS</div><h1>Artifacts &amp; agent handoffs</h1><p>See the files, hashes, review notes and actual evidence that workers pass to the next agent.</p></div></div><div class="panel evidence-panel"><div class="side-panel-title"><h3 id="handoff-heading">Project artifact ledger</h3><button class="secondary" id="refresh-handoffs">Refresh evidence</button></div><p class="evidence-intro">A receiving agent is blocked when a required handoff is missing or an attached file's digest changes. <b>Planning text is not executed code.</b></p><div class="evidence-columns"><div><h3>Uploaded files &amp; SHA-256</h3><div id="artifact-list" class="ledger-items"></div></div><div><h3>Agent-to-agent handoffs</h3><div id="handoff-list" class="ledger-items"></div></div></div></div></section>
   </main>
 </div>

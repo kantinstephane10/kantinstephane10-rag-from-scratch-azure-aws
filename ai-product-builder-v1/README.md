@@ -1,79 +1,58 @@
-# AI Product Builder V1.0 — GPT Meeting Studio & Project Workspace
+# AI Product Builder V1.1 — Reference Dashboard + In-app OpenAI Setup
 
-This is a **working local control-plane prototype** for the 9-layer / 49-role AI Agent, Agentic AI and RAG Product Builder. It provides a project brief/estimate form, document ledger, persisted GPT agent messaging and handoffs, project activity, a Product Manager-chaired meeting studio, and cancellation controls. **It is not yet a full code-generating and deploying AI product factory.** Code/tool execution and production deployment require additional work and explicit human approval.
+A local **AI Agent / Agentic AI / RAG Product Builder control-plane prototype** with 49 specialist roles and nine organization layers. V1.1 rebuilds the live workflow dashboard around the operator's screenshot and adds browser-based OpenAI API configuration, per-agent model routing, and token-usage limits.
 
-The application uses **OpenAI GPT models only** for live responses; there is no Ollama integration. Demo mode generates synthetic responses and **never calls OpenAI**. GPT API calls may incur charges; a cancellation prevents publishing late results but cannot guarantee cancellation of a network call already made.
+**Scope:** This app manages project intake, planning via OpenAI, specialist messaging, documented handoffs, meetings, cancellation, artifact uploads and review. It is **not** a finished autonomous code-writing/testing/deployment factory. An `agent replied` receipt is not proof of source files built, tests executed, LangChain/LangGraph installed, or a production RAG deployed. Do not authorize a release based only on generated text.
 
-## Launch on your Windows machine
+## Run directly from GitHub (Windows PowerShell)
 
-Use **PowerShell** in the extracted `ai-product-builder` directory. Your existing `rag-training` Python shortcut was pointing to a missing Python 3.12 installation; avoid using that broken interpreter. Your Anaconda Python 3.14.6 was previously confirmed to work.
+If you already cloned `kantinstephane10/kantinstephane10-rag-from-scratch-azure-aws` using `--single-branch`:
 
 ```powershell
-& "$HOME\anaconda3\python.exe" --version
+# Run in the repository ROOT, not inside the old ai-product-builder folder
+
+git remote set-branches --add origin feat/ai-product-builder-v11-reference-ui-settings
+git fetch origin
+git switch -c feat/ai-product-builder-v11-reference-ui-settings origin/feat/ai-product-builder-v11-reference-ui-settings
+cd ai-product-builder-v1
+
 & "$HOME\anaconda3\python.exe" -m unittest discover -s tests -v
-& "$HOME\anaconda3\python.exe" server.py --demo --port 8767
-```
-
-Open **http://127.0.0.1:8767/** directly. The PowerShell process must remain running. If you prefer, use `./run_windows.ps1 -Demo -Port 8767` after allowing scripts in your session.
-
-For live GPT calls, stop the demo process with `Ctrl+C`. Set your key for the current PowerShell session **without putting it in code or Git**:
-
-```powershell
-$key = Read-Host "OpenAI API key" -AsSecureString
-$env:OPENAI_API_KEY = [System.Net.NetworkCredential]::new('', $key).Password
 & "$HOME\anaconda3\python.exe" server.py --port 8767
 ```
 
-Model IDs are configured by role in `config.py`. Your API project must have access to the relevant models. Override environment variables, e.g. `$env:GPT_MODEL_ENGINEERING = 'gpt-6.2-sol'`. No fallback to Ollama is attempted.
+Open **http://127.0.0.1:8767/** by typing it directly into Firefox or Edge. Keep PowerShell open. This application uses Python's standard library only; it does not need Ollama or a separate Streamlit installation.
 
-## Create your first project
+### Setup entirely in the UI
 
-1. Open **Projects** from the dark navigation sidebar or click **Create a project** on the architecture page.
-2. Choose **RAG assistant**, **AI agent**, or **Agentic AI system**. Provide a project name and detailed goals/requirements.
-3. Optionally attach PDF/text/code/reference files, up to **1 MB per file**. The UI uploads each selected document to the project artifact ledger **before** starting its Product Manager. Uploads are stored locally, SHA-256 hashed and accessible in **Handoffs & artifacts**. Current agents do **not** automatically parse these attachments into a RAG index.
-4. Enter cost assumptions, select a GPT model profile, and enable **provider consent** before live GPT execution. Demo mode doesn't contact OpenAI.
-5. Leave **Start the Product Manager agent upon creation** checked, then click **Validate & start project**. The project is created, documents are saved, and the Product Manager's initial task is queued.
-6. Under **Agent sequence**, track real queued/running/done/failed states. Selecting a worker displays its actual assignment and response. **A completed planning message is not equivalent to code execution or passed tests.**
-7. Under **Meeting studio**, create a meeting with any agents. The Product Manager chairs. You can observe, join, ask directed questions, dictate if your browser supports it, or take the floor to prevent ongoing agent responses from being published.
+1. Click the round workflow icon to open the sidebar, then **OpenAI & model settings**. You can also open it from **Projects → Provider API keys**.
+2. Paste your own OpenAI API key and choose **Save API key**. The key is never returned in API responses. On Windows, the application encrypts it at rest using Windows DPAPI scoped to the logged-in user. On other platforms it is session-only and not persisted. The DPAPI path must be verified on your actual Windows installation.
+3. Click **Find available models**. This asks the OpenAI models API for the models accessible to your key.
+4. Configure model IDs for the **Astra** (architecture), **Sol** (engineering), **Terra** (business), and **Luna** (routine) routing groups. *These are labels from the requested design, not proof that a model with the pictured ID exists.* Replace any example IDs with actual API model IDs from your account. Configure overrides for any of the **49 individual workers**, and optionally a meeting-specific model.
+5. Set maximum output tokens per response, number of GPT calls per project, and total reported tokens per project. Set mode to **Live OpenAI GPT** and click **Save routing, budgets & mode**. Without a key, switching to live is blocked. API calls can incur separate charges.
+6. In **Projects**, describe the AI Agent / Agentic AI / RAG project, upload reference documents (up to 1 MB each), check OpenAI processing consent, leave **Start the Product Manager agent upon creation** checked, and select **Validate & start project**.
 
-### Cancel meetings and individual/bulk agent tasks (V1.0)
+Use **Meeting studio** to watch Product Manager-chaired agent conversations, take the floor, and ask specialists direct questions. The Product Manager can convene agent-only meetings without your participation, subject to meeting quotas. Select tasks to cancel individually or in batches and supply a required reason. Cancelling prevents late results from being published but may not cancel an API call already in flight.
 
-- For a scheduled or live meeting, click **Cancel meeting**. A custom in-app dialog requires a **5–500 character reason**. The transcript and reason persist in SQLite, pending meeting turns are cancelled, and results of prior in-flight turns are suppressed if they arrive later.
-- To cancel one worker assignment, select its row, click **Cancel task**, and enter a reason in the custom dialog.
-- To cancel several assignments, check the boxes beside eligible tasks, or click **Select all queued**. Click **Cancel selected (N)** and enter a reason. The API only cancels the **explicitly selected** IDs and rejects the entire batch if any ID is invalid, from another project, or no longer cancellable. A separate **Clear selection** control is included.
-- **End meeting** uses the same in-app confirmation dialog but is separate from cancellation. Completed or previously cancelled work cannot be cancelled again; cancelled tasks block final approval.
-- **A pending API model response may continue billing after cancellation**, even though no late response or new outgoing task is published.
+## Token-budget enforcement
 
-### Meetings, handoffs and safety
+- The configured `max_output_tokens` value is sent to OpenAI for each Responses API request.
+- An atomic SQLite ledger reserves **one request** before a model call; when the call budget is exhausted, subsequent calls fail closed.
+- Reported `usage.total_tokens` is recorded after successful responses. When the recorded total exceeds the configured threshold, subsequent requests are blocked. **This is not a strict hard cap on the tokens consumed by a currently running request**, nor a guaranteed dollar-cost cap.
+- Model requests with HTTP errors still count toward the request count; token usage for failed requests may be unavailable.
+- The usage count appears in the live project activity panel. Demo-mode responses do not consume OpenAI tokens.
 
-- All 49 registered roles can communicate using a shared SQLite-backed mailbox. Product Manager chairs meetings. A directed question queues the addressed agent first.
-- Human floor ownership preempts automatic contribution publishing. Agent meetings are capped to avoid uncontrolled conversation loops.
-- Agent-to-agent project messages require a verified sender handoff record. The next agent must inspect/acknowledge it. The ledger lists artifacts, hashes and `test_status` (currently `not_executed`, because this prototype does not execute generated code).
-- Approval of a project through the tracked API is guarded by a human operator and refuses unresolved tasks, cancelled tasks, or unacknowledged handoffs. **There is no real deployment endpoint**.
-- The app binds to localhost and uses restrictive origin checks. Do not expose its Python HTTP server to the public internet without adding HTTPS, authentication, RBAC, rate limits and other hardening.
+## Security and limitations
 
-## Verify locally
+- Local server binds to `127.0.0.1` and the settings/key endpoints accept **localhost-only** calls; origin checks protect writes from unrelated browser pages. Do **not** expose this raw HTTP server to the internet.
+- API keys are never stored in source code, project briefs, artifacts or the shared database, nor echoed by the settings endpoints. The local encrypted credential is in `data/openai-key.dpapi` on Windows; `data/` is Git-ignored.
+- Project files/handoffs include checksums, status and evidence markers. Text-only planning is explicitly distinguishable from real executed tests. There is no production-grade sandbox, CI/CD, app generation, public internet-tool broker, LangSmith tracing pipeline, or notification delivery in this version.
+- The screenshots' green ticks are **not** shown indiscriminately. A worker tile only becomes green if that role has a completed recorded task. Human approval is a separate operator gate.
+
+## Validation
 
 ```powershell
 & "$HOME\anaconda3\python.exe" -m unittest discover -s tests -v
 & "$HOME\anaconda3\python.exe" -m compileall -q .
 ```
 
-The release passed **60 deterministic unit/integration tests**, Python compilation, Node.js JS syntax validation, a live local-server startup check, and a headless Chromium UI walkthrough with a Python-to-HTTP bridge (used because the automated browser environment blocks direct localhost navigation). These tests did not call OpenAI, verify your Windows browser, or exercise live GPT account credentials.
-
-The test report is in `docs/TEST_REPORT.md` and a sample project brief is in `docs/EXAMPLE_PROJECT.md`.
-
-## Source map
-
-- `server.py` — local HTTP server, JSON routes, access restrictions
-- `static/` — project intake, organization, meeting, task, and evidence interfaces
-- `engine.py`, `gpt_client.py`, `config.py` — GPT agent processing and model routing
-- `store.py` — project/work queues, SQLite cancellation receipts, human approval guard
-- `meetings.py` — scheduled and live rooms, interrupted turns, audited cancellation
-- `handoffs.py` — project documents, SHA-256 integrity and mandatory handoffs
-- `roles.py`, `architecture.py` — 49 roles and 9 organizational layers
-- `tests/` — standard-library tests; no OpenAI service needed
-
-## Honest scope boundary
-
-V1.0 **can start and track an AI product project and coordinate specialist GPT messages and meetings**. It does not yet write files on behalf of agents, run tool sandboxes, execute pytest on generated code, create Git commits, ingest a vector index, or deploy the resulting RAG/AI products. Additional implementation and verification are required before relying on it for autonomous software delivery.
+Node.js is optional for a JS syntax check: `node --check static/app.js`. Offline Python, localhost HTTP, and browser layout tests were performed here; Windows DPAPI and live paid OpenAI inference require verification on the user's Windows computer.

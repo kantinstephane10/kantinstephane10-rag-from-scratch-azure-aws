@@ -87,6 +87,38 @@ class Store:
                 if name not in columns:
                     db.execute(f'ALTER TABLE messages ADD COLUMN {name} {datatype}')
 
+    def reserve_llm_call(self, usage_key, max_calls, max_tokens):
+        """Atomically reserve one call. Limits apply before requests, not within them."""
+        if not isinstance(usage_key,str) or len(usage_key)>100:
+            raise StoreError('Invalid usage key.')
+        with self.db() as db:
+            db.execute('''CREATE TABLE IF NOT EXISTS llm_usage (
+                usage_key TEXT PRIMARY KEY, call_count INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0)''')
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT * FROM llm_usage WHERE usage_key=?',(usage_key,)).fetchone()
+            calls = row['call_count'] if row else 0
+            tokens = row['total_tokens'] if row else 0
+            if calls >= max_calls or tokens >= max_tokens:
+                raise StoreError('GPT budget reached: new model calls are blocked until limits are increased.')
+            db.execute('''INSERT INTO llm_usage (usage_key, call_count, total_tokens) VALUES (?,1,0)
+                       ON CONFLICT(usage_key) DO UPDATE SET call_count=call_count+1''',(usage_key,))
+            return {'call_count':calls+1,'total_tokens':tokens}
+
+    def record_llm_usage(self, usage_key, used_tokens):
+        if isinstance(used_tokens, bool) or not isinstance(used_tokens, int) or used_tokens < 0:
+            return
+        with self.db() as db:
+            db.execute('UPDATE llm_usage SET total_tokens=total_tokens+? WHERE usage_key=?',(used_tokens,usage_key))
+
+    def llm_usage(self, usage_key):
+        with self.db() as db:
+            db.execute('''CREATE TABLE IF NOT EXISTS llm_usage (
+                usage_key TEXT PRIMARY KEY, call_count INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0)''')
+            row=db.execute('SELECT * FROM llm_usage WHERE usage_key=?',(usage_key,)).fetchone()
+            return dict(row) if row else {'usage_key':usage_key,'call_count':0,'total_tokens':0}
+
     def create_project(self, name, brief, *, intake=None):
         if not isinstance(name, str) or not name.strip() or len(name) > 160:
             raise StoreError("Project name must contain 1–160 characters.")
@@ -184,7 +216,7 @@ class Store:
         for message in all_messages:
             counts[message['status']] = counts.get(message['status'],0) + 1
         counts['total'] = len(all_messages)
-        return {'project':project,'counts':counts,'messages':all_messages}
+        return {'project':project,'counts':counts,'messages':all_messages,'llm_usage':self.llm_usage(pid)}
 
     def messages(self,pid,limit=200):
         self.project(pid)

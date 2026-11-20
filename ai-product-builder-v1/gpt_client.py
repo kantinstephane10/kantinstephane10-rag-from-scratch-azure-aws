@@ -60,11 +60,12 @@ def parse_response(data):
 
 
 class GPTClient:
-    def __init__(self, api_key=None, endpoint=None, timeout=60, transport=None):
+    def __init__(self, api_key=None, endpoint=None, timeout=60, transport=None, max_output_tokens=900):
         self.key = api_key if api_key is not None else os.getenv("OPENAI_API_KEY", "")
         self.endpoint = endpoint or "https://api.openai.com/v1/responses"
         self.timeout = timeout
         self.transport = transport or urlopen
+        self.max_output_tokens = max_output_tokens
 
     def generate(self, role, model, instructions, context):
         if not self.key:
@@ -74,7 +75,7 @@ class GPTClient:
             "instructions": instructions,
             "input": json.dumps(context, ensure_ascii=False),
             "store": False,
-            "max_output_tokens": 1400,
+            "max_output_tokens": self.max_output_tokens,
             "text": {"format": {"type": "json_schema", "name": "agent_handoff", "schema": RESPONSE_SCHEMA, "strict": True}},
         }
         req = Request(self.endpoint, data=json.dumps(body).encode("utf-8"),
@@ -90,7 +91,9 @@ class GPTClient:
             raise ModelError(f"OpenAI connection failed: {type(exc).__name__}.", retryable=True) from exc
         except (ValueError, UnicodeDecodeError) as exc:
             raise ModelError("OpenAI returned an invalid JSON HTTP response.", retryable=True) from exc
-        return parse_response(payload)
+        result = parse_response(payload)
+        result["_usage"] = payload.get("usage") or {}
+        return result
 
 
 class DemoClient:

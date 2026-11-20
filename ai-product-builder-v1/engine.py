@@ -14,14 +14,45 @@ LOG = logging.getLogger(__name__)
 
 
 class Engine:
-    def __init__(self, store, client=None, demo=False, poll=0.7):
+    def __init__(self, store, client=None, demo=False, poll=0.7, runtime=None):
         self.store = store
-        self.client = client or (DemoClient() if demo else GPTClient())
+        self.runtime = runtime
+        if runtime is not None:
+            demo = runtime.data['mode'] == 'demo'
+        self.client = client or (DemoClient() if demo else GPTClient(api_key=runtime.key if runtime else None,
+            max_output_tokens=runtime.data['max_output_tokens'] if runtime else 900))
         self.demo = demo
         self.poll = poll
         self.shutdown = Event()
         self.thread = None
         self._prefer_meeting = True
+
+    def apply_runtime(self):
+        """Switch future worker calls when operator saves settings; in-flight calls may finish."""
+        if self.runtime is None: return
+        snapshot=self.runtime.snapshot()
+        demo=snapshot['mode']=='demo'
+        self.client=DemoClient() if demo else GPTClient(api_key=self.runtime.key,
+                             max_output_tokens=snapshot['max_output_tokens'])
+        self.demo=demo
+
+    def _model(self, role, *, meeting=False, profile='standard'):
+        if self.runtime is not None:
+            return self.runtime.model_for(role,meeting=meeting,profile=profile)
+        return model_for(role) if meeting else model_for_project(role,profile)
+
+    def _reserve(self, usage_key):
+        if self.runtime is None or self.demo:
+            return
+        limits=self.runtime.snapshot()
+        self.store.reserve_llm_call(usage_key,limits['max_calls_per_project'],
+                                    limits['max_total_tokens_per_project'])
+
+    def _record(self, usage_key, outcome):
+        if self.runtime is not None and not self.demo:
+            usage=outcome.get('_usage') or {}
+            if isinstance(usage,dict):
+                self.store.record_llm_usage(usage_key,int(usage.get('total_tokens') or 0))
 
     def kickoff(self, project_id):
         project = self.store.project(project_id)
@@ -67,7 +98,7 @@ class Engine:
                 handoff=inspect_handoff(self.store,task['handoff_id'],pid)['manifest']
             if not self.demo and not project['intake']['provider_consent']:
                 raise ModelError('Provider consent is required for this project.')
-            model=model_for_project(role,project['intake']['model_profile'])
+            model=self._model(role,profile=project['intake']['model_profile'])
             instructions=(f"You are {role}, one of 49 specialist AI workers in a shared AI product engineering organization. "
                           f"Your mandate: {ROLES[role]} Deliverables: {', '.join(DELIVERABLES[role])}. "
                           "You may communicate directly with ANY other registered specialist at any time by "
@@ -93,7 +124,9 @@ class Engine:
                      "message":task["body"],"from":task["sender"],"recipient":role,
                      "recent_team_messages":recent,"relay_hops_remaining":MAX_DEPTH-task["depth"],
                      "mandatory_verified_handoff":handoff}
+            self._reserve(pid)
             outcome=self.client.generate(role,model,instructions,context)
+            self._record(pid,outcome)
             reply=outcome["reply"]
             if not isinstance(reply,str) or not reply.strip():
                 raise ModelError("GPT reply was empty.")
@@ -173,8 +206,12 @@ class Engine:
                      "question_message_id":turn.get("question_message_id"),
                      "participants":room["participants"],"recent_transcript":recent,
                      "project_brief":self.store.project(room["project_id"])["brief"][:4000] if room["project_id"] else "Standalone meeting"}
-            outcome=self.client.generate(role,model_for(role),instructions,context)
-            meetings.finish_turn(self.store,turn["id"],outcome["reply"],model_for(role),
+            model=self._model(role,meeting=True)
+            usage_key=room["project_id"] or ("standalone:"+room["id"])
+            self._reserve(usage_key)
+            outcome=self.client.generate(role,model,instructions,context)
+            self._record(usage_key,outcome)
+            meetings.finish_turn(self.store,turn["id"],outcome["reply"],model,
                                  questions=outcome.get("outgoing",[]))
         except ModelError as exc:
             meetings.fail_turn(self.store,turn["id"],exc,retryable=exc.retryable)
