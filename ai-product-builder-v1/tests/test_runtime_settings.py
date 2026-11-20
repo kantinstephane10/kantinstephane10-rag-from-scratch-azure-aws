@@ -36,7 +36,7 @@ class RuntimeConfigurationTests(unittest.TestCase):
         fake='sk-'+'f'*40
         data=self.settings.save_key(fake)
         self.assertNotIn(fake,json.dumps(data))
-        self.settings.update({'max_output_tokens':800})
+        self.settings.update({'mode':'demo'})
         self.assertNotIn(fake,self.settings.path.read_text())
         if os.name!='nt':
             self.assertFalse(self.settings.key_path.exists())
@@ -60,33 +60,65 @@ class RuntimeConfigurationTests(unittest.TestCase):
         with self.assertRaises(StoreError):self.settings.update({'role_models':{'ghost':'gpt-4.1'}})
         with self.assertRaises(StoreError):self.settings.update({'role_models':{'dev-1':'bad model id!'}})
 
-    def test_budgets_reject_invalid_values(self):
-        for bad in ('100',0,False,4001):
-            with self.subTest(bad=bad), self.assertRaises(StoreError):
-                self.settings.update({'max_output_tokens':bad})
+    def test_legacy_caps_are_ignored_and_removed(self):
+        self.settings.update({'max_output_tokens':128,'max_calls_per_project':1,'max_total_tokens_per_project':500})
+        cfg=self.settings.snapshot()
+        for field in ('max_output_tokens','max_calls_per_project','max_total_tokens_per_project'):
+            self.assertNotIn(field,cfg)
+        reopened=RuntimeSettings(Path(self.tmp.name))
+        self.assertNotIn('max_calls_per_project',reopened.snapshot())
 
-    def test_budget_reservations_are_atomic_and_persisted(self):
-        self.assertEqual(self.store.reserve_llm_call('project',2,100)['call_count'],1)
-        self.store.record_llm_usage('project',90)
-        self.assertEqual(self.store.reserve_llm_call('project',2,100)['call_count'],2)
-        with self.assertRaises(StoreError):self.store.reserve_llm_call('project',2,100)
-        self.assertEqual(self.store.llm_usage('project')['total_tokens'],90)
-        self.assertEqual(self.store.llm_usage('project')['call_count'],2)
+    def test_usage_tracking_does_not_block_at_former_limits(self):
+        for _ in range(4):
+            self.store.reserve_llm_call('project',1,1)
+            self.store.record_llm_usage('project',5000)
+        stats=self.store.llm_usage('project')
+        self.assertEqual(stats['call_count'],4)
+        self.assertEqual(stats['total_tokens'],20000)
 
-    def test_hard_stop_after_reported_token_threshold(self):
-        self.store.reserve_llm_call('other',10,500)
-        self.store.record_llm_usage('other',500)
-        with self.assertRaises(StoreError):self.store.reserve_llm_call('other',10,500)
+    def test_api_payload_omits_local_max_output_limit(self):
+        from gpt_client import GPTClient
+        from io import BytesIO
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self,*args): return False
+            def read(self,*args): return b''
+        captured=[]
+        def fake_transport(req,timeout=None):
+            captured.append(json.loads(req.data.decode()))
+            class Response:
+                def __enter__(self):return self
+                def __exit__(self,*args):return False
+                def read(self):return b'{}'
+            return Response()
+        client=GPTClient(api_key='sk-test',transport=fake_transport)
+        with self.assertRaises(Exception):
+            client.generate('dev-1','gpt-test','be expert',{'task':'plan'})
+        self.assertNotIn('max_output_tokens',captured[0])
+
+    def test_queued_specialists_continue_while_human_review_is_pending(self):
+        project=self.store.create_project('RAG project','Create RAG')
+        parent=self.store.send(project['id'],'human','product-manager','Plan RAG')
+        claimed=self.store.claim()
+        self.store.complete(claimed['id'],'model','Plan generated',needs_human=True)
+        self.assertEqual(self.store.project(project['id'])['status'],'awaiting_human')
+        followup=self.store.send(project['id'],'product-manager','security-agent','Review security',
+               parent_id=parent['id'],chain_id=parent['chain_id'],depth=1)
+        next_task=self.store.claim()
+        self.assertIsNotNone(next_task)
+        self.assertEqual(next_task['id'],followup['id'])
+        self.assertEqual(next_task['recipient'],'security-agent')
+        self.assertEqual(self.store.project(project['id'])['status'],'awaiting_human')
 
     def test_switching_mode_updates_engine_without_network(self):
         key='sk-'+'a'*40
         self.settings.save_key(key)
         engine=Engine(self.store,runtime=self.settings)
         self.assertTrue(engine.demo)
-        self.settings.update({'mode':'openai','max_output_tokens':600})
+        self.settings.update({'mode':'openai'})
         engine.apply_runtime()
         self.assertFalse(engine.demo)
-        self.assertEqual(engine.client.max_output_tokens,600)
+        self.assertIsNone(engine.client.max_output_tokens)
         self.assertEqual(engine.client.key,key)
         self.settings.clear_key()
         engine.apply_runtime()
@@ -128,10 +160,10 @@ class RuntimeConfigurationHttpTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as e:self.post('/api/settings',{'mode':'openai'})
         self.assertEqual(e.exception.code,400)
 
-    def test_settings_serve_all_49_roles_and_budget(self):
+    def test_settings_serve_all_49_roles_without_budget(self):
         with urlopen(self.base+'/api/settings') as r:cfg=json.load(r)
         self.assertEqual(len(cfg['roles']),49)
-        self.assertIn('max_total_tokens_per_project',cfg)
+        self.assertNotIn('max_total_tokens_per_project',cfg)
         with urlopen(self.base+'/api/projects') as r:self.assertIn('projects',json.load(r))
 
     def test_settings_api_rejects_cross_origin_write(self):

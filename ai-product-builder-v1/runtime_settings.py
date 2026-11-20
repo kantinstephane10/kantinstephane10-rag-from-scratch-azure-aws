@@ -1,4 +1,4 @@
-"""Local-only OpenAI settings; role routes and token budgets are editable in the UI.
+"""Local-only OpenAI settings; role routes are editable in the UI.
 
 Windows: API key is encrypted using Windows DPAPI for the logged-in account.
 Elsewhere: API key is memory-only (or OPENAI_API_KEY); never persist cleartext.
@@ -69,9 +69,6 @@ class RuntimeSettings:
             'models': dict(MODELS),
             'role_models': {},
             'meeting_model': '',
-            'max_output_tokens': 900,
-            'max_calls_per_project': 100,
-            'max_total_tokens_per_project': 150000,
         }
         if self.path.exists():
             try:
@@ -123,14 +120,9 @@ class RuntimeSettings:
             if not isinstance(value, str) or (value.strip() and not MODEL_ID.fullmatch(value.strip())):
                 raise StoreError('Invalid meeting model ID.')
             data['meeting_model'] = value.strip()
-        for key, low, high in (('max_output_tokens', 128, 4000),
-                               ('max_calls_per_project', 1, 1000),
-                               ('max_total_tokens_per_project', 500, 10000000)):
-            if key in supplied:
-                value = supplied[key]
-                if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
-                    raise StoreError(f'{key} must be an integer between {low} and {high}.')
-                data[key] = value
+        # Legacy token/call caps are ignored, including values saved by older versions.
+        for old_limit in ('max_output_tokens','max_calls_per_project','max_total_tokens_per_project'):
+            data.pop(old_limit, None)
         if allow_mode and 'mode' in supplied:
             if supplied['mode'] not in ('demo', 'openai'):
                 raise StoreError('Mode must be demo or openai.')

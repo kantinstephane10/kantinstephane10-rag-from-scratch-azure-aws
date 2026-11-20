@@ -111,7 +111,9 @@ function renderArchitecture(){
  badge.className='workflow-badge';
  if(!data){badge.textContent='READY';$('workflow-subtitle').textContent='Create a project to start the agent workflow';}
  else if(status==='approved'){badge.textContent='APPROVED';$('workflow-subtitle').textContent=data.project.name+' · Human-approved project';badge.classList.add('success');}
- else if(status==='awaiting_human'){badge.textContent='PAUSED';$('workflow-subtitle').textContent=data.project.name+' · Awaiting human decision';badge.classList.add('paused');}
+ else if(status==='awaiting_human'&&count.processing>0){badge.textContent='WORKING';$('workflow-subtitle').textContent=data.project.name+' · Advisory agents working; human review pending';badge.classList.add('working');}
+ else if(status==='awaiting_human'&&count.queued>0){badge.textContent='QUEUED';$('workflow-subtitle').textContent=data.project.name+' · Specialists scheduled automatically; human review pending';badge.classList.add('queued');}
+ else if(status==='awaiting_human'){badge.textContent='REVIEW';$('workflow-subtitle').textContent=data.project.name+' · Advisory work complete; awaiting human decision';badge.classList.add('paused');}
  else if(count.processing>0){badge.textContent='WORKING';$('workflow-subtitle').textContent=data.project.name+' · Agents processing tasks';badge.classList.add('working');}
  else if(count.total>0&&count.queued===0){badge.textContent='PAUSED';$('workflow-subtitle').textContent=data.project.name+' · Between agent turns';badge.classList.add('paused');}
  else if(count.total>0){badge.textContent='QUEUED';$('workflow-subtitle').textContent=data.project.name+' · Agent tasks queued';badge.classList.add('queued');}
@@ -363,9 +365,6 @@ async function refreshSettings(){
  $('settings-mode').value=cfg.mode||'demo';
  for(const group of MODEL_GROUPS){$('route-'+group).value=cfg.models?.[group]||'';}
  $('route-meeting').value=cfg.meeting_model||'';
- $('limit-output').value=cfg.max_output_tokens||900;
- $('limit-calls').value=cfg.max_calls_per_project||100;
- $('limit-tokens').value=cfg.max_total_tokens_per_project||150000;
  $('key-status').textContent=cfg.api_key_configured?'OpenAI key configured — stored '+cfg.key_storage+'.':'No API key configured. Demo mode only.';
  buildRoleGrid();renderModelRouting(cfg);
 }
@@ -373,15 +372,12 @@ function settingsPayload(){
  const role_models={};
  document.querySelectorAll('#agent-model-grid input[data-role]').forEach(input=>{if(input.value.trim())role_models[input.dataset.role]=input.value.trim()});
  const models={};for(const group of MODEL_GROUPS)models[group]=modelValue('route-'+group);
- return {models,role_models,meeting_model:modelValue('route-meeting'),mode:$('settings-mode').value,
-  max_output_tokens:Number($('limit-output').value),
-  max_calls_per_project:Number($('limit-calls').value),
-  max_total_tokens_per_project:Number($('limit-tokens').value)};
+ return {models,role_models,meeting_model:modelValue('route-meeting'),mode:$('settings-mode').value};
 }
 async function saveSettings(){
  try{const cfg=await post('/api/settings',settingsPayload());currentConfig=cfg;renderModelRouting(cfg);
   state.demo=cfg.mode==='demo';$('demo-label').textContent=state.demo?'OFFLINE DEMO — no GPT calls.':'LIVE OPENAI — API charges may apply.';
-  alertMessage('Model routing, token budget and run mode saved.');
+  alertMessage('Model routing and run mode saved. GPT usage is tracked without local token caps.');
  }catch(e){alertMessage(e.message)}
 }
 function bindSettings(){

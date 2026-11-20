@@ -60,7 +60,7 @@ def parse_response(data):
 
 
 class GPTClient:
-    def __init__(self, api_key=None, endpoint=None, timeout=60, transport=None, max_output_tokens=900):
+    def __init__(self, api_key=None, endpoint=None, timeout=60, transport=None, max_output_tokens=None):
         self.key = api_key if api_key is not None else os.getenv("OPENAI_API_KEY", "")
         self.endpoint = endpoint or "https://api.openai.com/v1/responses"
         self.timeout = timeout
@@ -75,9 +75,9 @@ class GPTClient:
             "instructions": instructions,
             "input": json.dumps(context, ensure_ascii=False),
             "store": False,
-            "max_output_tokens": self.max_output_tokens,
             "text": {"format": {"type": "json_schema", "name": "agent_handoff", "schema": RESPONSE_SCHEMA, "strict": True}},
         }
+        # Let the selected model/API determine output length instead of imposing a local cap.
         req = Request(self.endpoint, data=json.dumps(body).encode("utf-8"),
                       headers={"Authorization": f"Bearer {self.key}", "Content-Type": "application/json"},
                       method="POST")
