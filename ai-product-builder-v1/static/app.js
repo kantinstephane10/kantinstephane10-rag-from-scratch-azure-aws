@@ -16,6 +16,7 @@ function switchView(view){
  document.body.classList.remove('navigation-open');$('navigation-backdrop').hidden=true;
  if(view==='handoffs')refreshEvidence().catch(e=>alertMessage(e.message));
  if(view==='settings')refreshSettings().catch(e=>alertMessage(e.message));
+ if(view==='settings')refreshReadiness().catch(e=>alertMessage(e.message));
 }
 
 function fillSelect(select,entries,first){const old=select.value;select.replaceChildren();if(first)select.append(mk('option',{value:first[0]},first[1]));entries.forEach(([value,label])=>select.append(mk('option',{value},label)));if([...select.options].some(o=>o.value===old))select.value=old;}
@@ -137,7 +138,7 @@ function renderProjects(){
   const entry=mk('div',{class:'project-ledger-entry'});
   const item=mk('button',{class:'project-item'+(state.projectSelected===project.id?' selected':''),type:'button'});
   item.append(mk('b',{},project.name),mk('small',{},project.status+' · '+project.id));
-  item.addEventListener('click',async()=>{state.projectSelected=project.id;state.selectedTask=null;state.selectedTaskIds.clear();renderProjects();await refreshActivity();await refreshRagStatus();});
+  item.addEventListener('click',async()=>{state.projectSelected=project.id;state.selectedTask=null;state.selectedTaskIds.clear();renderProjects();await refreshActivity();await refreshRagStatus();await refreshWebsiteStatus();});
   const del=mk('button',{class:'danger project-delete-button',type:'button','aria-label':'Delete project '+project.name},'Delete');
   del.addEventListener('click',()=>openDeleteDialog(project));
   entry.append(item);
@@ -162,6 +163,7 @@ async function refreshProjects(){
  renderProjects();refreshProjectPicker();
  if(state.projectSelected)await refreshActivity();else {state.activity=null;$('project-live').hidden=true;renderArchitecture();}
  await refreshRagStatus();
+ await refreshWebsiteStatus();
 }
 
 function intakePayload(){const num=id=>Number($(id).value||'0');return {product_type:$('project-type').value,model_profile:$('model-profile').value,provider_consent:$('provider-consent').checked,estimated_hours:num('estimated-hours'),hourly_rate:num('hourly-rate'),one_time_expenses:num('one-time'),monthly_cost:num('monthly-cost'),contingency_pct:num('contingency')};}
@@ -245,6 +247,46 @@ async function refreshRagStatus(){
  $('rag-ask').disabled=!data.indexed||data.stale||busy||state.demo;
  $('rag-upload').disabled=busy;
 }
+async function refreshWebsiteStatus(){
+ const project=state.projects.find(p=>p.id===state.projectSelected);
+ const panel=$('website-panel');
+ panel.hidden=!project||!state.activity||state.activity.project?.intake?.product_type!=='website';
+ if(panel.hidden){$('website-iframe').removeAttribute('src');return}
+ const pid=project.id;
+ const data=await api(`/api/projects/${pid}/website/status`);
+ if(pid!==state.projectSelected)return;
+ const url=`/api/projects/${pid}/website/preview/index.html`;
+ $('website-status').textContent=data.built?`Built ${Object.keys(data.files).length} verified files · ${data.template} / ${data.theme} · version ${data.generation.slice(0,8)}`:'No website generated yet.';
+ $('website-download').hidden=!data.built;
+ if(data.built){$('website-download').href=`/api/projects/${pid}/website/download`;const urlWithVersion=url+'?v='+data.generation;
+  if($('website-iframe').getAttribute('src')!==urlWithVersion)$('website-iframe').src=urlWithVersion;
+ }else $('website-iframe').removeAttribute('src');
+}
+async function buildWebsite(event){
+ event.preventDefault();const pid=state.projectSelected;if(!pid)return;
+ const button=$('website-build');button.disabled=true;
+ try{
+  const result=await post(`/api/projects/${pid}/website/build`,{
+   title:$('website-title').value,tagline:$('website-tagline').value,
+   template:$('website-template').value,theme:$('website-theme').value});
+  await refreshWebsiteStatus();alertMessage(`Website generated: ${Object.keys(result.files).length} verified files. Preview and download are ready.`);
+ }catch(err){alertMessage(err.message)}finally{button.disabled=false}
+}
+async function refreshReadiness(){
+ const root=$('readiness-results');root.replaceChildren(mk('p',{class:'muted'},'Inspecting local prerequisites…'));
+ const data=await api('/api/system/readiness');root.replaceChildren();
+ const overview=mk('p',{class:'muted'},`Python ${data.python} · free disk ${data.free_disk_bytes===null?'unknown':(data.free_disk_bytes/1073741824).toFixed(1)+' GiB'} · production certification: NOT COMPLETE`);
+ root.append(overview);
+ const grid=mk('div',{class:'readiness-grid'});
+ for(const lib of data.libraries){const item=mk('div',{class:'readiness-item'});
+  item.append(mk('b',{},`${lib.installed?'✓':'○'} ${lib.name}`),mk('span',{},`${lib.installed?lib.version:'not installed'} · ${lib.purpose}`));grid.append(item)}
+ root.append(grid);
+ const programs=mk('p',{class:'muted'},'Tools: '+data.programs.map(p=>`${p.name}: ${p.available?'available':'not found'}`).join(' · '));root.append(programs);
+ root.append(mk('h3',{},'Remaining production controls'));
+ const ul=mk('ul');for(const gap of data.production_gaps){ul.append(mk('li',{},gap))}root.append(ul);
+ root.append(mk('p',{class:'muted'},'RAG packages: '+data.installation.local_rag+' · OCR: '+data.installation.local_ocr+' · Optional agent frameworks: '+data.installation.optional_agents));
+}
+
 let projectToDelete=null;
 function openDeleteDialog(project){
  projectToDelete={id:project.id,name:project.name};
@@ -437,7 +479,7 @@ function bind(){
   try{await post('/api/settings/key/clear',{});state.demo=true;$('project-key-status').textContent='No provider key saved.';alertMessage('Key cleared; offline mode enabled.');}
   catch(e){alertMessage(e.message)}
  });
- $('workflow-project-picker').addEventListener('change',async e=>{state.projectSelected=e.target.value||null;state.selectedTask=null;state.selectedTaskIds.clear();renderProjects();if(state.projectSelected)await refreshActivity();else{state.activity=null;renderArchitecture();}});
+ $('workflow-project-picker').addEventListener('change',async e=>{state.projectSelected=e.target.value||null;state.selectedTask=null;state.selectedTaskIds.clear();renderProjects();if(state.projectSelected){await refreshActivity();await refreshRagStatus();await refreshWebsiteStatus();}else{state.activity=null;renderArchitecture();await refreshRagStatus();await refreshWebsiteStatus();}});
  document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
  $('new-meeting').addEventListener('click',openModal);for(const id of ['close-modal','cancel-modal','close-backdrop'])$(id).addEventListener('click',closeModal);
  $('refresh-rooms').addEventListener('click',async()=>{try{await refreshMeetings();await refreshRoom()}catch(e){alertMessage(e.message)}});
@@ -448,6 +490,9 @@ function bind(){
  $('rag-cancel').addEventListener('click',async()=>{if(!state.projectSelected)return;try{await post(`/api/projects/${state.projectSelected}/rag/cancel`,{});await refreshRagStatus();}catch(e){alertMessage(e.message)}});
  $('rag-upload').addEventListener('click',uploadRagDocuments);
  $('rag-question-form').addEventListener('submit',askRag);
+ $('website-form').addEventListener('submit',buildWebsite);
+ $('website-refresh').addEventListener('click',()=>refreshWebsiteStatus().catch(e=>alertMessage(e.message)));
+ $('readiness-refresh').addEventListener('click',()=>refreshReadiness().catch(e=>alertMessage(e.message)));
  $('delete-confirm-name').addEventListener('input',()=>{$('delete-project-confirm').disabled=!projectToDelete||$('delete-confirm-name').value!==projectToDelete.name});
  $('delete-project-form').addEventListener('submit',submitDeleteProject);
  for(const id of ['delete-dialog-x','delete-dismiss','delete-backdrop'])$(id).addEventListener('click',closeDeleteDialog);
@@ -460,7 +505,7 @@ function bind(){
  if($('hero-meetings'))$('hero-meetings').addEventListener('click',()=>switchView('meetings'));
  for(const id of ['estimated-hours','hourly-rate','one-time','monthly-cost','contingency'])$(id).addEventListener('input',updateEstimate);
  updateEstimate();
- $('project-form').addEventListener('submit',async e=>{e.preventDefault();const kickoff=$('project-kickoff').checked;const intake=intakePayload();if(kickoff&&!state.demo&&!intake.provider_consent){alertMessage('Check the provider consent box before sending a brief to GPT.');return;}try{
+ $('project-form').addEventListener('submit',async e=>{e.preventDefault();const requestedKickoff=$('project-kickoff').checked;const intake=intakePayload();const kickoff=requestedKickoff&&(state.demo||intake.provider_consent);if(requestedKickoff&&!kickoff&&intake.product_type!=='website'){alertMessage('Check the provider consent box before sending a brief to GPT.');return;}try{
   const docs=[...$('project-files').files];
   if(docs.some(f=>f.size<1||f.size>MAX_FILE_SIZE))throw Error('Every project file must be between 1 byte and 1 GiB.');
   // Create first, upload references, then kickoff so the project starts with attached documents.
@@ -472,7 +517,7 @@ function bind(){
   if(kickoff)await post(`/api/projects/${project.id}/kickoff`,{});
   $('project-form').reset();$('pending-docs').textContent='Up to 1 GiB each. Authorized agents can read text excerpts.';$('project-upload-progress').textContent='';
   updateEstimate();await refreshProjects();await refreshActivity();
-  alertMessage('Project created'+(kickoff?' with two Business Analysts and Product Manager queued.':'.')+' Track work below.');
+  alertMessage(intake.product_type==='website'?'Website created with verifiable source files. Preview below; GPT kickoff needs provider consent.':('Project created'+(kickoff?' with two Business Analysts and Product Manager queued.':'.')+' Track work below.'));
  }catch(err){alertMessage(err.message)}});
  $('ask-worker').addEventListener('click',()=>{const task=state.activity?.messages?.find(x=>x.id===state.selectedTask);if(!task)return;openModal();$('meeting-topic').value=`Review ${state.activity.project.name} with ${nice(task.recipient)}`;$('meeting-project').value=state.projectSelected;for(const el of document.querySelectorAll('#role-checks input'))el.checked=el.value===task.recipient;countChecked();});
  $('meeting-upload').addEventListener('click',uploadMeetingDocuments);
@@ -574,4 +619,4 @@ function bindSettings(){
 }
 
 bindSettings();
-bind();init();setInterval(async()=>{try{await refreshMeetings();await refreshRoom();if(['projects','architecture'].includes(state.view)&&state.projectSelected){await refreshActivity();if(state.view==='projects')await refreshRagStatus();}}catch(e){/* transient connection errors handled on user actions */}},1500);
+bind();init();setInterval(async()=>{try{await refreshMeetings();await refreshRoom();if(['projects','architecture'].includes(state.view)&&state.projectSelected){await refreshActivity();if(state.view==='projects'){await refreshRagStatus();await refreshWebsiteStatus();}}}catch(e){/* transient connection errors handled on user actions */}},1500);

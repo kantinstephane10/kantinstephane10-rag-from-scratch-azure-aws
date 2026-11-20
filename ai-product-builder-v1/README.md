@@ -1,4 +1,4 @@
-# AI Product Builder V1.1 — Reference Dashboard + In-app OpenAI Setup
+# AI Product Builder V1.5 — Website Builder, Local RAG & Runtime Audit
 
 A local **AI Agent / Agentic AI / RAG Product Builder control-plane prototype** with 49 specialist roles and nine organization layers. V1.3 adds an executable document RAG pathway and project deletion while preserving the reference-style dashboard and browser-managed OpenAI model routing.
 
@@ -20,7 +20,7 @@ cd ai-product-builder-v1
 & "$HOME\anaconda3\python.exe" server.py --port 8767
 ```
 
-Open **http://127.0.0.1:8767/** by typing it directly into Firefox or Edge. Keep PowerShell open. This application uses Python's standard library only; it does not need Ollama or a separate Streamlit installation.
+Open **http://127.0.0.1:8767/** by typing it directly into Firefox or Edge. Keep PowerShell open. The dashboard and static website builder use Python's standard library; local RAG requires packages from `requirements-rag.txt`. No Ollama is used.
 
 ### Setup entirely in the UI
 
@@ -123,3 +123,24 @@ See [RELEASE_NOTES_V1.3.3.md](RELEASE_NOTES_V1.3.3.md). Highlights: 1 GiB stream
 - Configure the embedding model and OCR mode through **OpenAI & model settings**. **Rebuild the index after changing embedding models.** The selected model is persisted per-index so queries use a matching model.
 - Python installation on Windows: from `ai-product-builder-v1`, `& "$HOME\anaconda3\python.exe" -m pip install -r requirements-rag.txt`; optionally install `requirements-ocr.txt`, and run `server.py --port 8767`. Large indexing may use substantial disk and CPU.
 - `--demo` still simulates agent messages; indexing is real and local even in demo mode. **Do not report production deployment, LangGraph code generation, full 1 GiB benchmark, ACL certification, or live provider verification as passed:** none of those is proven by this release.
+
+
+## V1.5 — Website Builder & honest production prerequisite audit
+
+**New website product type.** Select **Website / landing page** when creating a project. A responsive, mobile-ready multi-page website is generated immediately, *without a GPT call or token usage*. In the Website Builder project panel you can edit the site name/tagline, choose **Business**, **Portfolio**, or **Documentation**, select a color theme, rebuild, preview Home/About/Contact safely inside a script-disabled sandbox, and export all files in a ZIP. Generated HTML/CSS/metadata/README are project-scoped, checksummed and versioned. The previous site remains intact if a rebuild fails. Project deletion also removes the website directory. Business Analysts and Product Manager kickoff still work for website projects when explicitly enabled with provider consent.
+
+The Website Builder produces real static HTML/CSS source files, **not arbitrary GPT-authored code**, a dynamic backend, a deployed website, hosted forms, user auth, or custom domain. A generated landing page is not an agent-generated and independently validated production web application. External hosting and any protected deployment require operator approval.
+
+**Runtime audit.** Select **Settings → Runtime and production prerequisite audit → Run audit**. This reports actual Python module versions, presence of Git/Node/Tesseract and free disk, plus missing enterprise controls. A successful local run does **not** set `production_ready` true. For RAG install `requirements-rag.txt`; optionally install `requirements-ocr.txt`; additional optional LangChain/LangGraph/Chroma libraries are declared in `requirements-agent-optional.txt` (installing them does not create an agent command runner).
+
+**Windows PowerShell — existing checkout:**
+
+```powershell
+& "$HOME\anaconda3\python.exe" -m pip install -r requirements-rag.txt
+& "$HOME\anaconda3\python.exe" -m unittest discover -s tests -v
+& "$HOME\anaconda3\python.exe" server.py --port 8767
+```
+
+Open `http://127.0.0.1:8767/`. The `run_windows.ps1` launcher now accepts API keys configured in the UI without requiring an environment variable. Python 3.11–3.13 is the recommended tested ecosystem target; test external libraries carefully if your Anaconda interpreter is Python 3.14.
+
+**Production exclusions.** This local single-operator application still lacks multiuser authentication and fine-grained ACLs, hardened public TLS/auth/rate limiting, a sandboxed arbitrary code runner for all 49 agents, full CI/CD, reliable distributed job queue, restore drills, monitoring/alerting certification, and a measured 1 GiB end-to-end ingestion benchmark. The UI enumerates those gaps. Do **not** expose the built-in `ThreadingHTTPServer` directly to the internet.

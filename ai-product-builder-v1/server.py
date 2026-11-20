@@ -30,6 +30,8 @@ from handoffs import (save_artifact, save_artifact_stream, save_meeting_artifact
 from rag_pipeline import init_rag
 from large_rag import (init_large_rag, rag_status_large, start_large_index_job, answer_large_question, cancel_large_index)
 from hf_embeddings import DEFAULT_MODEL, MODELS as HF_MODELS
+from website_builder import build_website, website_status, website_file, website_zip
+from system_readiness import readiness
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger(__name__)
@@ -96,6 +98,22 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
             self.send_header('Content-Length',str(len(encoded)))
             self.end_headers()
             self.wfile.write(encoded)
+
+        def _binary(self, status, raw, mime, filename=None, preview=False):
+            self.send_response(status)
+            self.send_header('Content-Type', mime)
+            self.send_header('Content-Length', str(len(raw)))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            if filename:
+                self.send_header('Content-Disposition', 'attachment; filename="' + filename + '"')
+            if preview:
+                self.send_header('Content-Security-Policy',
+                    "default-src 'none'; style-src 'self'; img-src 'self' data:; "
+                    "script-src 'none'; form-action 'none'; object-src 'none'; "
+                    "base-uri 'none'; frame-ancestors 'self'; sandbox allow-same-origin")
+            self.end_headers()
+            self.wfile.write(raw)
 
         def _file(self,filename,mime):
             data=(ROOT/'static'/filename).read_bytes()
@@ -188,6 +206,9 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                 elif path=='/api/health':
                     self._json(200,{'status':'ok','llm':'OpenAI GPT','offline_demo':engine.demo,
                                     'api_key_configured':bool(engine.client.key) if hasattr(engine.client,'key') else False})
+                elif path=='/api/system/readiness':
+                    if not is_loopback: raise StoreError('Readiness inspection requires localhost.')
+                    self._json(200,readiness(Path(store.filename).parent))
                 elif path=='/api/architecture': self._json(200,blueprint())
                 elif path=='/api/settings':
                     self._json(200,runtime.snapshot() if runtime else settings())
@@ -195,6 +216,17 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                     if not is_loopback: raise StoreError('OpenAI configuration requires local access.')
                     if runtime is None: raise StoreError('Runtime settings not configured.')
                     self._json(200,{'models':runtime.available_models()})
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/website/status',path):
+                    self._json(200,website_status(store,path.split('/')[3]))
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/website/preview/(index\.html|about\.html|contact\.html|styles\.css)',path):
+                    parts=path.split('/')
+                    name=parts[-1]
+                    raw=website_file(store,parts[3],name)
+                    mime='text/css; charset=utf-8' if name.endswith('.css') else 'text/html; charset=utf-8'
+                    self._binary(200,raw,mime,preview=True)
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/website/download',path):
+                    pid=path.split('/')[3]
+                    self._binary(200,website_zip(store,pid),'application/zip',filename='website-'+pid+'.zip')
                 elif path=='/api/projects': self._json(200,{'projects':store.projects()})
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/rag/status',path):
                     self._json(200,rag_status_large(store,path.split('/')[3]))
@@ -260,10 +292,16 @@ def make_server(store,engine,host='127.0.0.1',port=8766,access_token=None,runtim
                     if data.get('kickoff',False) and not engine.demo and data.get('intake',{}).get('provider_consent') is not True:
                         raise StoreError('Confirm provider consent before starting GPT workers.')
                     project=store.create_project(data.get('name',''),data.get('brief',''),intake=data.get('intake'))
+                    if project['intake']['product_type']=='website':
+                        # The scoped static website can be built without a GPT key or code runner.
+                        build_website(store,project['id'],data.get('website',{}))
                     if data.get('kickoff',False):
                         engine.kickoff(project['id'])
                         auto_index(project['id'])
                     self._json(201,project)
+                elif re.fullmatch(r'/api/projects/[a-f0-9]{12}/website/build',path):
+                    if not is_loopback: raise StoreError('Website generation requires localhost.')
+                    self._json(201,build_website(store,path.split('/')[3],data))
                 elif re.fullmatch(r'/api/projects/[a-zA-Z0-9]+/rag/index',path):
                     pid=path.split('/')[3]
                     if not is_loopback:raise StoreError('Local indexing requires localhost access.')

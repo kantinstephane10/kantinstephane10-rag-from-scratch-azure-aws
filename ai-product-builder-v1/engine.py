@@ -132,12 +132,17 @@ class Engine:
                           "Recipients must be exact registered role IDs. "
                           "Available peers: " + ", ".join(ROLES))
             analyses=self.store.initial_business_analysis(pid) if task.get('workflow_stage')=='pm_kickoff' else []
+            website_evidence=None
+            if project['intake']['product_type']=='website':
+                from website_builder import website_status
+                website_evidence=website_status(self.store,pid)
             context={"project":{"name":project["name"],"brief":project["brief"],"status":project["status"]},
                      "message":task["body"],"from":task["sender"],"recipient":role,
                      "recent_team_messages":recent,"delegation_depth":task['depth'],
                      "mandatory_business_analysis":[{'agent':a['recipient'],'status':a['status'],
                         'findings':(a['reply'] or '')[:5000], 'error':a['error']} for a in analyses],
                      "mandatory_verified_handoff":handoff,
+                     "verified_website_build":website_evidence,
                      "authorized_files":agent_file_context(self.store,pid=pid)}
             self._reserve(pid)
             outcome=self._generate_with_files(role,model,instructions,context,pid=pid)

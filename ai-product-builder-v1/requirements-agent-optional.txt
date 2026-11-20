@@ -1,0 +1,13 @@
+# Optional libraries for FUTURE approved agent execution/orchestration.
+# Installing does NOT grant agents file-system commands or make the local app production-ready.
+# Always install into a separate Python environment and test platform compatibility.
+langchain-core>=1,<2
+langchain-openai>=1,<2
+langchain-chroma>=1,<2
+langgraph>=1,<2
+chromadb>=1,<2
+pydantic>=2,<3
+pytest>=8,<10
+httpx>=0.27,<1
+structlog>=24,<27
+prometheus-client>=0.20,<1

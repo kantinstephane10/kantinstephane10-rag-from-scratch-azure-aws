@@ -10,9 +10,7 @@ if (-not (Test-Path $python)) {
 if (-not (Test-Path $python)) {
     throw 'No working Python found. Install Python 3.10+, or create a .venv in this folder.'
 }
-if (-not $Demo -and -not $env:OPENAI_API_KEY) {
-    throw 'Set OPENAI_API_KEY for live GPT, or run with -Demo for offline testing.'
-}
+# API key and live/demo mode are configured from the browser Settings UI.
 Push-Location $PSScriptRoot
 try {
     & $python --version

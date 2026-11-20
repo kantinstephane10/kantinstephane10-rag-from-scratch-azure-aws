@@ -247,6 +247,12 @@ class Store:
                 shutil.rmtree(target)
         except OSError as exc:
             raise StoreError('Could not remove all project files; retry Delete project. No other projects were affected.') from exc
+        # Remove generated website files under the same project ID before removing DB records.
+        from website_builder import delete_website
+        try:
+            delete_website(self, pid)
+        except OSError as exc:
+            raise StoreError('Could not delete project website; retry deletion.') from exc
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
             row=db.execute('SELECT status FROM projects WHERE id=?',(pid,)).fetchone()

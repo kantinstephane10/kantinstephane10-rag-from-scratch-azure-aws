@@ -4,7 +4,7 @@ Estimates are operator-supplied assumptions; no AI agent pretends to know hours.
 """
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
-PRODUCT_TYPES = {'agent', 'agentic', 'rag'}
+PRODUCT_TYPES = {'agent', 'agentic', 'rag', 'website'}
 MODEL_PROFILES = {'standard', 'deep-review', 'cost-aware'}
 
 
@@ -24,7 +24,7 @@ def validate_intake(data):
     kind = data.get('product_type', 'rag')
     profile = data.get('model_profile', 'standard')
     if kind not in PRODUCT_TYPES:
-        raise ValueError('Unknown AI product type.')
+        raise ValueError('Unknown product type.')
     if profile not in MODEL_PROFILES:
         raise ValueError('Unknown GPT model profile.')
     if type(data.get('provider_consent', False)) is not bool:
