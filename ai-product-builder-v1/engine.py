@@ -227,6 +227,10 @@ class Engine:
     def _process_meeting(self,turn):
         try:
             room=meetings.meeting(self.store,turn["meeting_id"])
+            if room['project_id'] and not self.demo:
+                project=self.store.project(room['project_id'])
+                if not project['intake']['provider_consent']:
+                    raise ModelError('OpenAI provider consent is required before project meeting files are processed.')
             role=turn["agent"]
             recent=[{"speaker":m["actor"],"body":m["body"][:1400],"target":m["target"]}
                     for m in room["messages"][-22:]]

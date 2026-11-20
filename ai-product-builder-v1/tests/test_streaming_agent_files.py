@@ -129,6 +129,20 @@ class StreamingFileTests(unittest.TestCase):
         self.assertEqual(len(client.contexts),2)
         self.assertIn('meeting file',client.contexts[1]['file_read_results'][0]['text'])
 
+    def test_project_meeting_cannot_send_files_without_provider_consent(self):
+        pid=self.store.create_project('Private','Confidential',
+                 intake={'product_type':'rag','provider_consent':False})['id']
+        room=create_meeting(self.store,topic='Check private file',
+                    participants=['security-agent'],project_id=pid)
+        save_artifact_stream(self.store,pid,'private.txt',io.BytesIO(b'private data'),12)
+        client=FakeReaderClient();engine=Engine(self.store,client=client,demo=False)
+        self.assertTrue(engine.process_once())
+        self.assertEqual(len(client.contexts),0)
+        with self.store.db() as db:
+            failures=db.execute("SELECT COUNT(*) FROM meeting_turns WHERE meeting_id=? AND status='failed'",
+                            (room['id'],)).fetchone()[0]
+        self.assertGreaterEqual(failures,1)
+
     def test_scoped_pdf_attachment_receipt(self):
         # Receipt storage is independent of availability of the PDF parser.
         room=create_meeting(self.store,topic='PDF review',participants=['rag-engineer'],project_id=self.pid)
